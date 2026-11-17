@@ -1,0 +1,23 @@
+{
+  "name": "ai-psychosis-bench",
+  "version": "0.1.0",
+  "description": "A repeat-mistake benchmark for coding-agent memory, cut from hippo Z0 round 3.",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "ai-psychosis-bench": "lib/ab-run.mjs"
+  },
+  "scripts": {
+    "test": "vitest run --pool=forks --maxWorkers=2"
+  },
+  "engines": {
+    "node": ">=22.16.0"
+  },
+  "devDependencies": {
+    "vite": "^8.3.8",
+    "vitest": "^5.0.3"
+  },
+  "dependencies": {
+    "typescript": "^5.9.3"
+  }
+}
