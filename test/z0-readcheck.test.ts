@@ -227,8 +227,7 @@ describe('an ancestor file seen only at an apply\'s resume is kept, never invali
   });
   const above = (out: string, arm: string) => join(runRoot(out, arm), 'CLAUDE.md');
 
-  // Needs a memory arm; stage 2 runs it on the fake adapter.
-  it.skip('one a hook writes before a failing apply\'s resume skips the resume and leaves the apply valid', async () => {
+  it('one a hook writes before a failing apply\'s resume skips the resume and leaves the apply valid', async () => {
     const { out, log } = isolate('resume-ancestor');
     // A passing apply takes no resume, so a file written at this point could never invalidate it.
     __setSettleHook((_run: SettledRun, cell: string, when: string) => {

@@ -38,18 +38,18 @@ describe('the surface ledger (prereg 104)', () => {
   it('hashes every surface before and after each session; the hashes match the files', async () => {
     const { out } = isolate('ledger');
     const r = makeRepo();
-    await run(spec(r, [], [task(r, 'n1', 'MEMWRITE:a remembered line'), plain(r, 'n2')]), ['A1'], out);
+    await run(spec(r, [], [task(r, 'n1', 'MEMWRITE:a remembered line'), plain(r, 'n2')]), ['A1', 'A2'], out);
     const lines = readLedger(out);
-    for (const arm of ['A1']) {
-      // A hippo arm also logs the rows its hook injected (prereg 93).
-      const whens = arm === 'A2' ? ['pre-session', 'end', 'injected'] : ['pre-session', 'end'];
+    for (const arm of ['A1', 'A2']) {
+      const whens = ['pre-session', 'end'];
       for (const id of ['n1', 'n2']) expect(lines.filter((l) => l.arm === arm && l.taskId === id).map((l) => l.when), `${arm} ${id}`).toEqual(whens);
       const pre = lineOf(lines, arm, 'n2', 'pre-session');
       expect(pre).toMatchObject({ schema: 'z0-ledger/1', runName: 'seqF', sequence: 'seqF', seed: 1, position: 1, restorable: true, verified: null, copyErrors: [] });
       expect(Object.keys(pre.surfaces).sort()).toEqual(SURFACE_KEYS);
       expect(pre.surfaces.autoMemory.map((e) => e.path)).toEqual([expect.stringMatching(/^claude-config\/projects\/[^/]+\/memory\/MEMORY\.md$/)]);
       expect(pre.surfaces.instructions.map((e) => e.path)).toContain('work/CLAUDE.md');
-      expect(pre.surfaces.hippoWork.length > 0, arm).toBe(arm === 'A2');
+      // The fake memory keeps its store in the run's home, never in work/.hippo.
+      expect(pre.surfaces.hippoWork, arm).toEqual([]);
       const end = lineOf(lines, arm, 'n2', 'end');
       for (const entries of Object.values(end.surfaces)) {
         for (const e of entries) {
@@ -81,7 +81,7 @@ describe('the surface ledger (prereg 104)', () => {
 });
 
 describe('retry restores (prereg 114)', () => {
-  for (const arm of ['A1']) {
+  for (const arm of ['A1', 'A2']) {
     it(`a session-1 retry puts back every surface the cut-off attempt wrote (${arm})`, async () => {
       const { out } = isolate(`retry-${arm}`);
       const r = makeRepo();
@@ -89,8 +89,8 @@ describe('retry restores (prereg 114)', () => {
       await run(spec(r, [], [task(r, 'n1', 'LIMIT LIMIT_SURFACES look around'), plain(r, 'n2')]), [arm], out, { limitWaitMs: 0 });
       const seen = rawResult(out, arm, 'n1.json');
       expect(seen.memory ?? '').not.toContain('cutoff');
-      expect(seen).toMatchObject({ hippoLimit: false, homeLimit: false });
-      expect(find(readRecords(out), arm, 'n1')).toMatchObject({ invalid: null, limitRetries: 1, surfaceRestored: true });
+      expect(seen).toMatchObject({ hippoLimit: false, homeLimit: false, memoryExport: arm === 'A2' ? '' : null });
+      expect(find(readRecords(out), arm, 'n1')).toMatchObject({ invalid: null, void: null, limitRetries: 1, surfaceRestored: true });
       const lines = readLedger(out);
       const restore = lineOf(lines, arm, 'n1', 'retry-restore');
       expect(restore.verified).toBe(true);
@@ -107,11 +107,12 @@ describe('retry restores (prereg 114)', () => {
       teach(r, 't1', 'f1-l1', 'LESSON_BAD CUT_ON_RESUME LIMIT_SURFACES\nMEMWRITE_ON_RESUME:resume note'), plain(r, 'n1'), plain(r, 'n2'),
       apply(r, 'a1', 'f1-l1', 'look around only'), apply(r, 'a2', 'f1-l1', 'look around only'),
     ]);
-    await run(s, ['A1'], out, { limitWaitMs: 0 });
+    await run(s, ['A1', 'A2'], out, { limitWaitMs: 0 });
     const lines = readLedger(out);
-    for (const arm of ['A1']) {
+    for (const arm of ['A1', 'A2']) {
       const seen = rawResult(out, arm, 't1.resume.json');
       expect(seen.memory ?? '', arm).not.toMatch(/cutoff|resume note/);
+      expect(seen.memoryExport ?? '', arm).not.toContain('cutoff');
       expect(seen, arm).toMatchObject({ hippoLimit: false, homeLimit: false });
       expect(find(readRecords(out), arm, 't1'), arm).toMatchObject({ invalid: null, limitRetries: 1, surfaceRestored: true, lessons: [{ first: 'fail', final: 'pass' }] });
       const restore = lineOf(lines, arm, 't1', 'resume-restore');
@@ -201,7 +202,7 @@ describe('the z0-record/1 contract copy (E7)', () => {
     const s = spec(r, [family('f1', [lesson('f1-l1', 'Write the lesson file')])], [
       teach(r, 't1', 'f1-l1', 'LESSON_BAD MEMWRITE:taught'), plain(r, 'n1'), plain(r, 'n2'), apply(r, 'a1', 'f1-l1', 'LESSON_BAD'), apply(r, 'a2', 'f1-l1', 'LESSON_OK'),
     ]);
-    await run(s, ['A0', 'A1'], out);
+    await run(s, ['A0', 'A1', 'A2', 'A5'], out);
     const recs = readRecords(out);
     expect(validateCorpus(recs, readPlan(out))).toEqual([]);
     expect(abandonedTail(recs, readPlan(out))).toEqual([]);

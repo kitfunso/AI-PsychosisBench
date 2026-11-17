@@ -11,7 +11,7 @@ import { usageFromResult, isUsageLimit, transcriptWork } from '../lib/records.mj
 import { ARM_SEEDS } from '../lib/arms.mjs';
 import { SEED_CAP } from '../lib/z0-records.mjs';
 import { ancestorInstructionFiles } from '../lib/homes.mjs';
-import { fixtureEnv } from './fixtures/z0-harness.js';
+import { fixtureEnv, FAKE_MEMORY } from './fixtures/z0-harness.js';
 import { validateCorpus, validateRecord } from './fixtures/z0-contract.js';
 
 const FAKE = resolve(__dirname, 'fixtures', 'fake-claude.mjs');
@@ -115,7 +115,7 @@ function decoyHippo() {
 type RunOpts = Parameters<typeof runAll>[0];
 
 async function run(spec: RunOpts['spec'], arms: string[], out: string, extra: Partial<RunOpts> = {}) {
-  return runAll({ spec, arms, seeds: 1, outDir: out, model: null, claudeBin: CLAUDE, settleMs: 0, warmup: false, log: () => {}, passEnv: fixtureEnv(), ...extra });
+  return runAll({ spec, arms, seeds: 1, outDir: out, model: null, claudeBin: CLAUDE, adapter: FAKE_MEMORY, warmup: false, log: () => {}, passEnv: fixtureEnv(), ...extra });
 }
 
 describe('Z0 runner plan and reads', () => {
@@ -209,7 +209,7 @@ describe('Z0 runner plan and reads', () => {
 });
 
 describe('Z0 runner end to end (fake Claude Code)', () => {
-  it('runs the arms without memory with their settings, env, homes and PATH, and keeps the token out of every file', async () => {
+  it('runs all four arms with their settings, env, homes and PATH, and keeps the token out of every file', async () => {
     const home = isolate();
     const decoy = decoyHippo();
     process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sentinel-z0-token';
@@ -221,21 +221,24 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
     writeFileSync(dumpJs, "require('fs').appendFileSync(process.argv[2], JSON.stringify(process.env) + '\\n');\n");
     const dumpCmd = `node "${dumpJs}" "${dump}"`;
     const spec = validateTasks({ sequences: [{ id: 'seqA', cluster: 'repoA', repo: r.repo, fixedOrder: true, tasks: [task(r, 'a1', 'FIX add in lib.js', { setup: dumpCmd, test: `${dumpCmd} && node test.js` }), task(r, 'a2', 'look around add in lib.js only')] }] });
-    await run(spec, ['A0', 'A1'], out);
+    await run(spec, ['A0', 'A1', 'A2', 'A5'], out);
     const childEnvs = readFileSync(dump, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
-    expect(childEnvs).toHaveLength(4);
+    expect(childEnvs).toHaveLength(8);
     for (const e of childEnvs) {
       expect(JSON.stringify(e)).not.toContain('sentinel-z0-token');
+      // Setup and tests never see the memory's namespace or keys.
+      expect(Object.keys(e).filter((k) => k.toUpperCase().startsWith('AIPB_'))).toEqual([]);
       expect(String(Object.entries(e).find(([k]) => k.toUpperCase() === 'PATH')?.[1]).split(delimiter)).not.toContain(join(dirname(e.CLAUDE_CONFIG_DIR), 'bin'));
       expect(e.HIPPO_HOME).toMatch(/hippo-home$/);
     }
 
     const records = readRecords(out);
-    expect(records).toHaveLength(4);
+    expect(records).toHaveLength(8);
     const get = (arm: string, id: string) => records.find((x) => x.arm === arm && x.taskId === id);
     const raw = (arm: string, id: string) => rawResult(out, 'seqA', arm, id);
-    for (const arm of ['A0', 'A1']) {
+    for (const arm of ['A0', 'A1', 'A2', 'A5']) {
       const dirsOf = join(out, 'runs', 'seqA', arm, 'seed1');
+      const memory = arm === 'A2' || arm === 'A5';
       const res = raw(arm, 'a1');
       expect(res.env).toMatchObject({
         CLAUDE_CONFIG_DIR: join(dirsOf, 'claude-config'), CODEX_HOME: join(dirsOf, 'codex-home'), HIPPO_HOME: join(dirsOf, 'hippo-home'),
@@ -245,18 +248,27 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
       expect(res.argv).toEqual(expect.arrayContaining(['--setting-sources', 'project', '--strict-mcp-config']));
       expect(get(arm, 'a1')).toMatchObject({ resolved: true, transcriptFound: true, fileReads: 2, shellReads: 1 });
       expect(get(arm, 'a1').envKeys).toEqual(expect.arrayContaining(['CLAUDE_CONFIG_DIR', 'HIPPO_HOME']));
+      expect(get(arm, 'a1').envKeys.includes('AIPB_NAMESPACE')).toBe(memory);
       expect(get(arm, 'a1').envKeys.some((k: string) => /^ANTHROPIC_/i.test(k))).toBe(false);
       expect(get(arm, 'a1').order).toEqual(expect.any(Number));
       expect([get(arm, 'a1').position, get(arm, 'a2').position]).toEqual([0, 1]);
       const settings = JSON.parse(readFileSync(join(out, 'settings', `seqA-${arm}-seed1.json`), 'utf8'));
       if (arm === 'A0') expect(settings).toEqual({ autoMemoryEnabled: false });
       if (arm === 'A1') expect(settings).toEqual({});
+      if (memory) expect(settings).toEqual(FAKE_MEMORY.settings);
+      // The fake memory installs no hippo, so no arm's shell finds one.
       expect(res.hippoProbe.status).not.toBe(0);
       expect(res.hippoProbe.stderr).toMatch(/not recognized|not found/i);
       expect(res.hippoDir).toBeNull();
     }
     expect(existsSync(decoy.marker)).toBe(false);
     expect(get('A1', 'a2').repeatedErrors).toBe(1);
+
+    // A2's memory keeps the FIX lesson for a2; A5's a2 starts on a new, empty namespace.
+    expect(raw('A2', 'a2').memoryExport).toContain('operator flipped');
+    expect(raw('A5', 'a1').memoryExport).toBe('');
+    expect(raw('A5', 'a2').memoryExport).toBe('');
+    expect(raw('A0', 'a2').memoryExport).toBeNull();
 
     // No future: the workspace history ends at the task's base, never the fix.
     const log = execFileSync('git', ['log', '--all', '--format=%H'], { cwd: join(out, 'runs', 'seqA', 'A1', 'seed1', 'work'), encoding: 'utf8' });
@@ -267,11 +279,12 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
       const p = join(dir, f);
       return statSync(p).isDirectory() ? textUnder(p) : readFileSync(p, 'latin1');
     }).join('\n') : '');
-    for (const where of ['runs.jsonl', 'raw', 'settings', ...['A0', 'A1'].map((a) => join('runs', 'seqA', a, 'seed1', 'claude-config', 'projects'))]) {
+    for (const where of ['runs.jsonl', 'raw', 'settings', ...['A0', 'A1', 'A2', 'A5'].map((a) => join('runs', 'seqA', a, 'seed1', 'claude-config', 'projects'))]) {
       const p = join(out, where);
       expect(statSync(p).isDirectory() ? textUnder(p) : readFileSync(p, 'utf8')).not.toContain('sentinel-z0-token');
     }
     expect(existsSync(join(home, '.claude'))).toBe(false);
+    expect(existsSync(join(home, 'fakemem'))).toBe(false);
     expect(JSON.parse(readFileSync(join(out, 'plan.json'), 'utf8'))).toHaveLength(records.length);
 
     expect(validateCorpus(records, JSON.parse(readFileSync(join(out, 'plan.json'), 'utf8')))).toEqual([]);
@@ -477,6 +490,72 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
     expect(agents).toContain('carried agents note');
     expect(agents).not.toContain('limited edit');
   }, 120_000);
+
+  it('a limit retry runs the memory\'s reset, and with no reset the cell is void', async () => {
+    isolate();
+    const r = makeRepo();
+    const spec = validateTasks({ sequences: [{ id: 'seqL', cluster: 'c', repo: r.repo, fixedOrder: true, tasks: [task(r, 'l1', 'LIMIT_SURFACES look around'), task(r, 'l2', 'look around only')] }] });
+    const out = tmp('ab-run-limit-reset-');
+    process.env.FAKE_CLAUDE_LIMIT_ONCE = join(out, 'limit-hit');
+    await run(spec, ['A2'], out, { limitWaitMs: 0 });
+    expect(readRecords(out)[0]).toMatchObject({ taskId: 'l1', limitRetries: 1, invalid: null, void: null });
+    expect(rawResult(out, 'seqL', 'A2', 'l1').memoryExport).toBe('');
+    expect(readFileSync(join(out, 'runs', 'seqL', 'A2', 'seed1', 'home', 'fakemem', 'calls.log'), 'utf8')).toMatch(/^reset [0-9a-f]{16} since \d{4}-/m);
+
+    const bare = tmp('ab-run-limit-noreset-');
+    process.env.FAKE_CLAUDE_LIMIT_ONCE = join(bare, 'limit-hit');
+    await run(spec, ['A2'], bare, { limitWaitMs: 0, adapter: { ...FAKE_MEMORY, reset: undefined } });
+    const [l1, l2] = readRecords(bare);
+    expect(l1).toMatchObject({ taskId: 'l1', limitRetries: 1, invalid: null, void: 'memory-not-reset' });
+    expect(l1.voidHits.map((h: { reason: string }) => h.reason)).toContain('memory-not-reset');
+    expect(rawResult(bare, 'seqL', 'A2', 'l1').memoryExport).toContain('cutoff attempt note');
+    expect(l2).toMatchObject({ taskId: 'l2', void: null });
+  }, 120_000);
+
+  it('a gold line already in the memory skips the session and writes a void leak record', async () => {
+    isolate();
+    const gold = '// add must return the sum of both of its arguments';
+    const r = makeRepo(gold);
+    const out = tmp('ab-run-leak-');
+    const spec = validateTasks({ sequences: [{ id: 'seqK', cluster: 'c', repo: r.repo, fixedOrder: true, tasks: [task(r, 'k1', `look around PLANT:${gold}`), task(r, 'k2', 'FIX add in lib.js')] }] });
+    await run(spec, ['A2'], out);
+    expect(readFileSync(join(out, 'runs', 'seqK', 'A2', 'seed1', 'home', 'fakemem', 'entries.jsonl'), 'utf8')).toContain(gold);
+    const [k1, k2] = readRecords(out);
+    expect(k1).toMatchObject({ taskId: 'k1', invalid: null, leak: false });
+    for (const x of [k1, k2]) validateRecord(x);
+    expect(k2).toMatchObject({ ...NO_SESSION, taskId: 'k2', invalid: 'leak', leak: true, agentError: null, carryMerges: 0, carryUnionMerges: 0, carryDeleteKept: 0, homesAtStart: null });
+    for (const f of ['k2.json', 'k2.test.txt']) expect(existsSync(join(out, 'raw', 'seqK', 'A2', 'seed1', f)), f).toBe(false);
+  }, 60_000);
+
+  it('A2 and A5 run the memory\'s init at the first task that runs when the first task\'s setup fails', async () => {
+    isolate();
+    const r = makeRepo();
+    const out = tmp('ab-run-late-init-');
+    await run(validateTasks({ sequences: [{ id: 'seqN', cluster: 'c', repo: r.repo, fixedOrder: true, tasks: [task(r, 'n1', 'look around only', { setup: 'exit 1' }), task(r, 'n2', 'look around only')] }] }), ['A2', 'A5'], out);
+    for (const arm of ['A2', 'A5']) {
+      const n1 = readRecords(out).find((x) => x.arm === arm && x.taskId === 'n1');
+      const n2 = readRecords(out).find((x) => x.arm === arm && x.taskId === 'n2');
+      expect(n1).toMatchObject({ invalid: 'setup' });
+      expect(n2).toMatchObject({ invalid: null, transcriptFound: true });
+      expect(n2.homesAtStart).not.toBeNull();
+      const calls = readFileSync(join(out, 'runs', 'seqN', arm, 'seed1', 'home', 'fakemem', 'calls.log'), 'utf8').trim().split('\n');
+      // A5's namespace is n2's own, so its init line shows init waited for n2.
+      expect(calls.slice(1)).toEqual([`init ${rawResult(out, 'seqN', arm, 'n2').env.AIPB_NAMESPACE}`]);
+    }
+  }, 60_000);
+
+  it('the memory\'s install and commands run in the run\'s own HOME, never the operator\'s', async () => {
+    const realHome = isolate();
+    const r = makeRepo();
+    const out = tmp('ab-run-iso-');
+    const spec = validateTasks({ sequences: [{ id: 'seqI', cluster: 'repoI', repo: r.repo, fixedOrder: true, tasks: [task(r, 'i1', 'FIX add in lib.js'), task(r, 'i2', 'look around only')] }] });
+    await run(spec, ['A2'], out);
+    expect(existsSync(join(realHome, '.claude', 'settings.json'))).toBe(false);
+    expect(existsSync(join(realHome, 'fakemem'))).toBe(false);
+    const own = join(out, 'runs', 'seqI', 'A2', 'seed1', 'home');
+    expect(readFileSync(join(own, 'fakemem', 'calls.log'), 'utf8').split('\n')[0]).toBe(`install key=unset home=${own}`);
+    expect(readFileSync(join(own, 'fakemem', 'entries.jsonl'), 'utf8')).toContain('operator flipped');
+  }, 60_000);
 
   it('validates and plans a run from the command line, and a real run refuses a test-only stop or a missing token', () => {
     const scratch = tmp('ab-run-cli-');

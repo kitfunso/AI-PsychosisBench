@@ -5,11 +5,14 @@ import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { runAll, validateTasks } from '../../lib/ab-run.mjs';
 import { pathKey } from '../../lib/exec.mjs';
+import { loadAdapter } from '../../lib/adapter.mjs';
 import type { Z0Record, Z0PlanCell } from './z0-contract.js';
 
 export const FAKE = resolve(__dirname, 'fake-claude.mjs');
 export const CLAUDE = `"${process.execPath}" "${FAKE}"`;
 export const CHECKS = resolve(__dirname, 'z0-checks');
+// The memory every A2 and A5 test runs on.
+export const FAKE_MEMORY = loadAdapter(resolve(__dirname, 'fake-memory.json'));
 const PATH_KEY = pathKey(process.env);
 // The fakes' and checkers' control vars; armEnv drops every name off its allowlist, so a run passes them as --pass-env.
 const FIXTURE_VARS = ['FAKE_CLAUDE_LOG', 'FAKE_CLAUDE_LIMIT_ONCE', 'FAKE_CLAUDE_LIMIT_ALWAYS', 'FAKE_WT_DIR', 'FAKE_CODEX_LOG', 'FAKE_CODEX_STATE', 'FAKE_CODEX_INTERNAL_SOURCE', 'GIT_CONFIG_GLOBAL',
@@ -108,11 +111,11 @@ export function oneLesson(r: FixtureRepo, prompts: Record<string, string> = {}, 
   ]);
 }
 
-export interface RunExtra { model?: string | null; passEnv?: string[]; limitWaitMs?: number; limitMaxWaits?: number; sessionTimeoutMs?: number; canaries?: string[]; log?: (m: string) => void }
+export interface RunExtra { adapter?: unknown; model?: string | null; passEnv?: string[]; limitWaitMs?: number; limitMaxWaits?: number; sessionTimeoutMs?: number; canaries?: string[]; log?: (m: string) => void }
 /** The control vars a test has set, as --pass-env names. */
 export const fixtureEnv = (): string[] => FIXTURE_VARS.filter((k) => process.env[k] !== undefined);
 export async function run(s: ReturnType<typeof spec>, arms: string[], out: string, extra: RunExtra = {}) {
-  return runAll({ spec: s, arms, seeds: 1, outDir: out, model: null, claudeBin: CLAUDE, settleMs: 0, warmup: false, log: () => {}, passEnv: fixtureEnv(), ...extra });
+  return runAll({ spec: s, arms, seeds: 1, outDir: out, model: null, claudeBin: CLAUDE, adapter: FAKE_MEMORY, warmup: false, log: () => {}, passEnv: fixtureEnv(), ...extra });
 }
 
 const jsonl = <T>(f: string): T[] => (existsSync(f) ? readFileSync(f, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);

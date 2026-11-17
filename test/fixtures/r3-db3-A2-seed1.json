@@ -1,0 +1,90 @@
+{
+  "hooks": {
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hippo session-end --log-file \"C:\\z0-runs\\scored\\r3run\\db3-w1\\run\\hook-home\\.hippo\\logs\\claude-code-sleep.log\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hippo last-sleep --path \"C:\\z0-runs\\scored\\r3run\\db3-w1\\run\\hook-home\\.hippo\\logs\\claude-code-sleep.log\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hippo session-rules",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hippo compact-resume",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hippo context --pinned-only --include-recent 5 --format additional-context",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hippo pre-compact --log-file \"C:\\z0-runs\\scored\\r3run\\db3-w1\\run\\hook-home\\.hippo\\logs\\pre-compact.log\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hippo post-compact --log-file \"C:\\z0-runs\\scored\\r3run\\db3-w1\\run\\hook-home\\.hippo\\logs\\pre-compact.log\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hippo capture-error",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

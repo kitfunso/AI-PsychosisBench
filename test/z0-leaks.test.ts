@@ -63,19 +63,18 @@ describe('G3 leak search before the teach', () => {
     expect(sessions(log)).toEqual([]);
   }, 300_000);
 
-  // Needs a memory arm; stage 2 runs it on the fake adapter.
-  it.skip('in A2 a gzip in .hippo holding the phrase is a hippoWork leak and a zip one it cannot open is hippoWork-archive', async () => {
+  it('a gzip in .hippo holding the phrase is a hippoWork leak and a zip one it cannot open is hippoWork-archive', async () => {
     const { out } = isolate('leak-archive');
     const r = makeRepo();
-    const setup = 'node -e "const f=require(\'fs\'),z=require(\'zlib\');f.writeFileSync(\'.hippo/x.gz\',z.gzipSync(\'note zq-f1-l1\'));f.writeFileSync(\'.hippo/y.zip\',Buffer.from([80,75,3,4,0,0]))"';
+    const setup = 'node -e "const f=require(\'fs\'),z=require(\'zlib\');f.mkdirSync(\'.hippo\');f.writeFileSync(\'.hippo/x.gz\',z.gzipSync(\'note zq-f1-l1\'));f.writeFileSync(\'.hippo/y.zip\',Buffer.from([80,75,3,4,0,0]))"';
     const s = spec(r, f1(), [
       plain(r, 'n0'), task(r, 'n1', 'look around only', { setup }), teach(r, 't1', 'f1-l1', 'look around only'),
       plain(r, 'n2'), plain(r, 'n3'), apply(r, 'a1', 'f1-l1', 'look around only'), apply(r, 'a2', 'f1-l1', 'look around only'),
     ]);
-    await run(s, ['A2'], out);
+    await run(s, ['A1'], out);
     const recs = readRecords(out);
-    expect(find(recs, 'A2', 'n0')).toMatchObject({ invalid: null, leak: false });
-    const n1 = find(recs, 'A2', 'n1');
+    expect(find(recs, 'A1', 'n0')).toMatchObject({ invalid: null, leak: false });
+    const n1 = find(recs, 'A1', 'n1');
     expect(n1).toMatchObject({ invalid: 'leak', leak: true });
     expect(n1.leakHits).toContainEqual({ lessonId: 'f1-l1', surface: 'hippoWork', path: 'work/.hippo/x.gz' });
     expect(n1.leakHits).toContainEqual({ lessonId: null, surface: 'hippoWork-archive', path: 'work/.hippo/y.zip' });

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Stand-in for `claude -p --output-format json` in the token-eval runner tests. It reads the prompt from stdin,
-// runs the UserPromptSubmit hooks from --settings with a real payload, calls `hippo` through PATH, writes a transcript
+// runs the UserPromptSubmit hooks from --settings with a real payload, calls the fake memory (`fakemem`) through PATH, writes a transcript
 // under $CLAUDE_CONFIG_DIR/projects/ and prints a result shaped like Claude Code's, plus what it saw.
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -35,8 +35,12 @@ const napFor = (marker) => {
 // The session's auto-memory file and what it held at start, so a test can see what a retry put back.
 const folder = process.cwd().replace(/[^a-zA-Z0-9]/g, '-');
 const memoryFile = path.join(process.env.CLAUDE_CONFIG_DIR, 'projects', folder, 'memory', 'MEMORY.md');
+// A2 and A5 only: the runner names the namespace, and the fake memory's launcher is on PATH.
+const hasMemory = Boolean(process.env.AIPB_NAMESPACE);
+const remember = (text) => sh(`fakemem remember "${text}"`);
 const startSeen = {
   memory: fs.existsSync(memoryFile) ? fs.readFileSync(memoryFile, 'utf8') : null,
+  memoryExport: hasMemory ? execSync('fakemem export', { encoding: 'utf8' }) : null,
   hippoLimit: fs.existsSync(path.join('.hippo', 'limit.txt')),
   homeLimit: Boolean(process.env.HIPPO_HOME) && fs.existsSync(path.join(process.env.HIPPO_HOME, 'limit.txt')),
 };
@@ -49,6 +53,7 @@ const limitSurfaces = () => {
   if (!prompt.includes('LIMIT_SURFACES')) return;
   memWrite('cutoff');
   write(path.join('.hippo', 'limit.txt'), 'cut-off attempt\n');
+  if (hasMemory) remember('cutoff attempt note');
   if (process.env.HIPPO_HOME) write(path.join(process.env.HIPPO_HOME, 'limit.txt'), 'cut-off attempt\n');
 };
 
@@ -183,14 +188,14 @@ function firstSession() {
   if (prompt.includes('ORPHAN')) sh('git checkout -q --orphan scratch');
   if (prompt.includes('FIX')) {
     fs.writeFileSync('lib.js', 'module.exports.add = (a, b) => a + b;\n');
-    if (fs.existsSync('.hippo') && !prompt.includes('NOREMEMBER')) {
+    if (hasMemory && !prompt.includes('NOREMEMBER')) {
       // Let a failed remember crash the run: a swallowed error here hid a Windows path bug.
-      sh('hippo remember "add() in lib.js had its operator flipped; check operators first"');
+      remember('add() in lib.js had its operator flipped; check operators first');
     }
   }
   // PLANT:<text> saves <text> to the store verbatim, so a test can put a later task's gold line there.
   const plant = /PLANT:([^\n"]+)/.exec(prompt);
-  if (plant && fs.existsSync('.hippo')) sh(`hippo remember "${plant[1].trim()}"`);
+  if (plant && hasMemory) remember(plant[1].trim());
   if (prompt.includes('CARRY')) {
     fs.appendFileSync('AGENTS.md', 'carried agents note\n');
     fs.appendFileSync('CLAUDE.md', 'carried claude line\n');
@@ -220,7 +225,7 @@ function firstSession() {
   for (const m of prompt.matchAll(/MEMWRITE_B64:(\S+)/g)) memWrite(Buffer.from(m[1], 'base64').toString('utf8'));
   // NOTE:<text> is a frontmatter note beside MEMORY.md, the only kind hippo's importer reads.
   for (const [i, m] of [...prompt.matchAll(/^NOTE:(.+)$/gm)].entries()) write(path.join(path.dirname(memoryFile), `note-${i}.md`), `---\nname: note ${i}\n---\n${m[1].trim()}\n`);
-  if (/^IMPORT$/m.test(prompt)) sh('hippo import --agents');
+
   if (/\bHANG(?:_STDERR)?\b/.test(prompt)) hang('s1');
   for (const m of prompt.matchAll(/^USERMEM:(.+)$/gm)) fs.appendFileSync(path.join(process.env.CLAUDE_CONFIG_DIR, 'CLAUDE.md'), `${m[1]}\n`);
   if (prompt.includes('WORKTREE')) sh(`git worktree add -q --detach "${process.env.FAKE_WT_DIR}"`);
@@ -298,8 +303,8 @@ function resumeTurn() {
   if (lessonState() && input.startsWith('No:')) fs.writeFileSync('lesson.txt', 'ok\n');
   // GC_ON_RESUME: an agent's gc prunes every commit the runner has not held under a ref.
   if (prompt.includes('GC_ON_RESUME')) sh('git gc -q --prune=now');
-  // CAPTURE_TEACH: the agent saves the teach message to hippo itself.
-  if (prompt.includes('CAPTURE_TEACH')) sh(`hippo remember "${input.replaceAll('"', '')}"`);
+  // CAPTURE_TEACH: the agent saves the teach message to its memory itself.
+  if (prompt.includes('CAPTURE_TEACH')) remember(input.replaceAll('"', ''));
   // RESUME_<probe> lines are probes only the resume makes.
   const later = [...prompt.matchAll(/^RESUME_(\S.*)$/gm)].map((m) => m[1]).join('\n');
   appendTurn([{ type: 'user', message: { role: 'user', content: input } }, ...hookLine(), toolUse('Bash', { command: `echo resumed ${input.slice(0, 3)}` }), ...probes(later)]);
@@ -309,7 +314,7 @@ log(`${resumeId ? 'resume' : 'session'} ${sessionId}`);
 if (resumeId) resumeTurn();
 else firstSession();
 
-const PLAIN = ['CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'HIPPO_HOME', 'CLAUDE_CODE_DISABLE_AUTO_MEMORY', 'HIPPO_AGENT_MEMORY_TOOLS', 'DISABLE_AUTOUPDATER', 'EVAL_SEED', 'ANTHROPIC_BASE_URL'];
+const PLAIN = ['CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'HIPPO_HOME', 'CLAUDE_CODE_DISABLE_AUTO_MEMORY', 'HIPPO_AGENT_MEMORY_TOOLS', 'DISABLE_AUTOUPDATER', 'EVAL_SEED', 'ANTHROPIC_BASE_URL', 'AIPB_NAMESPACE'];
 const extra = Math.ceil(injected.length / 4);
 console.log(JSON.stringify({
   type: 'result', subtype: 'success', is_error: false, session_id: prompt.includes('NO_SESSION_ID') ? undefined : sessionId, num_turns: resumeId ? 1 : 3, total_cost_usd: 0.01,

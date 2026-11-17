@@ -8,6 +8,7 @@ import { createRequire, syncBuiltinESMExports } from 'node:module';
 import { promisify } from 'node:util';
 import { armEnv, childEnv, armSettings, cleanPath, assertToolsResolve, ARMS } from '../lib/arms.mjs';
 import { git } from '../lib/exec.mjs';
+import { loadAdapter } from '../lib/adapter.mjs';
 import { runDirs, freshRunDirs, assertFreshEmpty, ancestorInstructionFiles, checkHomes, checkEnvHomes } from '../lib/homes.mjs';
 import { STUB_CLAUDE_MD, stubBaseCommit, isInstructionPath, instructionSnapshot, instructionDelta, applyInstructions, checkoutBase, goldLines, writeHiddenTests } from '../lib/workspace.mjs';
 
@@ -187,15 +188,18 @@ describe('assertToolsResolve', () => {
 });
 
 describe('armSettings', () => {
-  const hippo = { hooks: Object.fromEntries(['SessionStart', 'UserPromptSubmit', 'SessionEnd', 'PreCompact', 'PostCompact', 'PostToolUseFailure'].map((e) => [e, [{ hooks: [] }]])) };
+  const settings = { hooks: Object.fromEntries(['SessionStart', 'UserPromptSubmit', 'SessionEnd', 'PreCompact', 'PostCompact', 'PostToolUseFailure'].map((e) => [e, [{ hooks: [] }]])) };
+  const adapter = { name: 'm', settings };
 
-  it('gives each arm its prereg settings; A5 keeps only the two injection events', () => {
-    expect(armSettings('A0', hippo)).toEqual({ autoMemoryEnabled: false });
-    expect(armSettings('A4', hippo)).toEqual({ autoMemoryEnabled: false });
-    expect(armSettings('A1', hippo)).toEqual({});
-    expect(armSettings('A2', hippo)).toEqual(hippo);
-    expect(Object.keys(armSettings('A5', hippo).hooks).sort()).toEqual(['SessionStart', 'UserPromptSubmit']);
-    expect(() => armSettings('A9', hippo)).toThrow(/unknown arm/);
+  it('gives each arm its prereg settings; A2 and A5 both get the manifest settings whole', () => {
+    expect(armSettings('A0', adapter)).toEqual({ autoMemoryEnabled: false });
+    expect(armSettings('A4', adapter)).toEqual({ autoMemoryEnabled: false });
+    expect(armSettings('A1', adapter)).toEqual({});
+    expect(armSettings('A2', adapter)).toEqual(settings);
+    expect(armSettings('A5', adapter)).toEqual(settings);
+    expect(armSettings('A2', { name: 'm' })).toEqual({});
+    expect(() => armSettings('A5', null)).toThrow(/A5 runs the memory under test; pass --memory <manifest>/);
+    expect(() => armSettings('A9', adapter)).toThrow(/unknown arm/);
   });
 });
 
@@ -350,12 +354,15 @@ function withFs<K extends 'readdirSync' | 'openSync'>(name: K, hooks: FsHooks, f
 
 const filesText = (dir: string): string => readdirSync(dir, { withFileTypes: true }).map((e) => (e.isDirectory() ? filesText(join(dir, e.name)) : readFileSync(join(dir, e.name), 'latin1'))).join('\n');
 
+// The hippo manifest's workDirs, which A2 and A5 keep across tasks.
+const keepOf = (arm: string): string[] => (arm === 'A2' ? ['.hippo'] : []);
+
 describe('workspace checkout', () => {
   it.each(['A0', 'A2'])('%s: leaves an earlier task base unreachable once a later task checks out an older base, even behind agent refs, worktrees and nested repos', async (arm) => {
     const { repo, base, fix } = await gitRepo({});
     const work = workRepo();
     const wg = (...args: string[]): string => execFileSync('git', args, { cwd: work, encoding: 'utf8' }).trim();
-    checkoutBase(repo, work, 'seqP', { id: 'p1', baseRef: fix }, arm);
+    checkoutBase(repo, work, 'seqP', { id: 'p1', baseRef: fix }, arm, keepOf(arm));
     mkdirSync(join(work, '.hippo'));
     writeFileSync(join(work, '.hippo', 'store.db'), 'hippo store\n');
     writeFileSync(join(work, 'lib.js'), 'agent edit\n');
@@ -381,7 +388,7 @@ describe('workspace checkout', () => {
     writeFileSync(join(work, '.hippo', 'notes.md'), 'agent notes\n');
     mkdirSync(join(work, 'node_modules'));
     writeFileSync(join(work, 'node_modules', 'notes.md'), 'the fix that a later task must never see\n');
-    checkoutBase(repo, work, 'seqP', { id: 'p2', baseRef: base }, arm);
+    checkoutBase(repo, work, 'seqP', { id: 'p2', baseRef: base }, arm, keepOf(arm));
     expect(readdirSync(work).sort()).toEqual(arm === 'A2' ? ['.git', '.hippo', 'CLAUDE.md', 'lib.js'] : ['.git', 'CLAUDE.md', 'lib.js']);
     if (arm === 'A2') expect(readdirSync(join(work, '.hippo')).sort()).toEqual(['notes.md', 'store.db']);
     expect(repoDirs(work)).toEqual(['']);
@@ -402,11 +409,11 @@ describe('workspace checkout', () => {
     const { repo, base, fix } = await gitRepo({});
     const work = workRepo();
     const wg = (...args: string[]): string => execFileSync('git', args, { cwd: work, encoding: 'utf8' }).trim();
-    checkoutBase(repo, work, 'seqG', { id: 'g1', baseRef: fix }, 'A0');
+    checkoutBase(repo, work, 'seqG', { id: 'g1', baseRef: fix }, 'A2', ['.hippo']);
     const moved = join(tmp('z0-moved-'), 'git');
     renameSync(join(work, '.git'), moved);
     writeFileSync(join(work, '.git'), `gitdir: ${moved}\n`);
-    const stub = checkoutBase(repo, work, 'seqG', { id: 'g2', baseRef: base }, 'A0');
+    const stub = checkoutBase(repo, work, 'seqG', { id: 'g2', baseRef: base }, 'A2', ['.hippo']);
     expect(statSync(join(work, '.git')).isDirectory()).toBe(true);
     expect(spawnSync('git', ['cat-file', '-e', `${fix}^{commit}`], { cwd: work }).status).not.toBe(0);
     expect(wg('rev-parse', 'HEAD')).toBe(stub);
@@ -439,7 +446,7 @@ describe('workspace checkout', () => {
   it.each(['A0', 'A2'])('%s: clears a path over 260 characters the agent left, without throwing', async (arm) => {
     const { repo, base, fix } = await gitRepo({});
     const work = workRepo();
-    checkoutBase(repo, work, 'seqL', { id: 'l1', baseRef: fix }, arm);
+    checkoutBase(repo, work, 'seqL', { id: 'l1', baseRef: fix }, arm, keepOf(arm));
     const segments = Array.from({ length: 6 }, (_, i) => String(i).repeat(50));
     for (const top of ['deep', join('.hippo', 'deep')]) {
       const dir = join(work, top, ...segments);
@@ -447,7 +454,7 @@ describe('workspace checkout', () => {
       writeFileSync(join(dir, 'notes.md'), 'x');
       expect(join(dir, 'notes.md').length).toBeGreaterThan(260);
     }
-    checkoutBase(repo, work, 'seqL', { id: 'l2', baseRef: base }, arm);
+    checkoutBase(repo, work, 'seqL', { id: 'l2', baseRef: base }, arm, keepOf(arm));
     expect(existsSync(join(work, 'deep'))).toBe(false);
     expect(existsSync(join(work, '.hippo'))).toBe(arm === 'A2');
     if (arm === 'A2') expect(repoDirs(work)).toEqual(['']);
@@ -608,7 +615,7 @@ describe('workspace checkout', () => {
     const { repo, base, fix } = await gitRepo({});
     const work = workRepo();
     const wg = (...args: string[]): string => execFileSync('git', args, { cwd: work, encoding: 'utf8' }).trim();
-    checkoutBase(repo, work, 'seqH', { id: 'h1', baseRef: fix }, 'A2');
+    checkoutBase(repo, work, 'seqH', { id: 'h1', baseRef: fix }, 'A2', ['.hippo']);
     const hippo = join(work, '.hippo');
     const store = ['hippo.db', 'hippo.db-wal', 'config.json', 'index.json', 'stats.json', 'embeddings.json', 'buffer/a.md', 'episodic/b.md', 'semantic/c.md', 'conflicts/d.json', 'compactions-spool/e.json'];
     for (const rel of store) {
@@ -635,7 +642,7 @@ describe('workspace checkout', () => {
     wg('clone', '-q', '.', join(outside, 'clone'));
     symlinkSync(join(outside, 'clone'), join(hippo, 'link'), 'junction');
     symlinkSync(join(outside, 'clone'), join(hippo, 'buffer', 'link'), 'junction');
-    checkoutBase(repo, work, 'seqH', { id: 'h2', baseRef: base }, 'A2');
+    checkoutBase(repo, work, 'seqH', { id: 'h2', baseRef: base }, 'A2', ['.hippo']);
     expect(readdirSync(hippo).sort()).toEqual(['buffer', 'compactions-spool', 'config.json', 'conflicts', 'embeddings.json', 'episodic', 'hippo.db', 'hippo.db-wal', 'index.json', 'semantic', 'stats.json']);
     expect(readdirSync(join(hippo, 'buffer'))).toEqual(['a.md']);
     expect(readdirSync(join(hippo, 'episodic'))).toEqual(['b.md']);
@@ -647,7 +654,7 @@ describe('workspace checkout', () => {
     const { repo, base, fix } = await gitRepo({});
     const work = workRepo();
     const wg = (...args: string[]): string => execFileSync('git', args, { cwd: work, encoding: 'utf8' }).trim();
-    checkoutBase(repo, work, 'seqN', { id: 'n1', baseRef: fix }, 'A2');
+    checkoutBase(repo, work, 'seqN', { id: 'n1', baseRef: fix }, 'A2', ['.hippo']);
     const hippo = join(work, '.hippo');
     mkdirSync(hippo);
     writeFileSync(join(hippo, 'hippo.db'), 'store\n');
@@ -662,14 +669,14 @@ describe('workspace checkout', () => {
     const moved = join(tmp('z0-bare-'), 'b.git');
     wg('clone', '-q', '--bare', '.', moved);
     for (const [from, to] of [['objects', 'Objects'], ['refs', 'Refs'], ['packed-refs', 'Packed-Refs'], ['HEAD', 'Head']]) renameSync(join(moved, from), join(hippo, to));
-    checkoutBase(repo, work, 'seqN', { id: 'n2', baseRef: base }, 'A2');
+    checkoutBase(repo, work, 'seqN', { id: 'n2', baseRef: base }, 'A2', ['.hippo']);
     expect(readdirSync(hippo)).toEqual(['hippo.db']);
   });
 
   it('A2: takes a store file or dir that vanishes after the purge lists it as gone, as SQLite drops -wal and -shm on close', async () => {
     const { repo, base, fix } = await gitRepo({});
     const work = workRepo();
-    checkoutBase(repo, work, 'seqV', { id: 'v1', baseRef: fix }, 'A2');
+    checkoutBase(repo, work, 'seqV', { id: 'v1', baseRef: fix }, 'A2', ['.hippo']);
     const hippo = join(work, '.hippo');
     for (const rel of ['hippo.db', 'hippo.db-wal', 'hippo.db-shm', 'episodic/b.md']) {
       mkdirSync(dirname(join(hippo, rel)), { recursive: true });
@@ -681,7 +688,7 @@ describe('workspace checkout', () => {
       vanished = true;
       for (const gone of ['hippo.db-wal', 'hippo.db-shm', 'episodic']) rmSync(join(hippo, gone), { recursive: true });
     };
-    withFs('readdirSync', { after: vanish }, () => checkoutBase(repo, work, 'seqV', { id: 'v2', baseRef: base }, 'A2'));
+    withFs('readdirSync', { after: vanish }, () => checkoutBase(repo, work, 'seqV', { id: 'v2', baseRef: base }, 'A2', ['.hippo']));
     expect(vanished).toBe(true);
     expect(readdirSync(hippo)).toEqual(['hippo.db']);
     expect(readFileSync(join(work, 'lib.js'), 'utf8')).toBe('a - b\n');
@@ -690,13 +697,13 @@ describe('workspace checkout', () => {
   it('A2: still throws on any other error opening a store file', async () => {
     const { repo, base, fix } = await gitRepo({});
     const work = workRepo();
-    checkoutBase(repo, work, 'seqE', { id: 'e1', baseRef: fix }, 'A2');
+    checkoutBase(repo, work, 'seqE', { id: 'e1', baseRef: fix }, 'A2', ['.hippo']);
     mkdirSync(join(work, '.hippo'));
     writeFileSync(join(work, '.hippo', 'hippo.db'), 'store\n');
     const deny = (p: string): void => {
       if (p.endsWith('hippo.db')) throw Object.assign(new Error(`EACCES: permission denied, open '${p}'`), { code: 'EACCES' });
     };
-    withFs('openSync', { before: deny }, () => expect(() => checkoutBase(repo, work, 'seqE', { id: 'e2', baseRef: base }, 'A2')).toThrow(/EACCES/));
+    withFs('openSync', { before: deny }, () => expect(() => checkoutBase(repo, work, 'seqE', { id: 'e2', baseRef: base }, 'A2', ['.hippo'])).toThrow(/EACCES/));
   });
 
   it('waits out a process from the last session that holds a workspace dir for a second, then clears it', async () => {
@@ -812,15 +819,23 @@ describe('homes check (built CLI, no claude session)', () => {
     process.env[key] = `${d}${delimiter}${process.env[key]}`;
     return d;
   };
-  // Stage 1 has no memory adapter, so the check covers the arms that run without one.
-  const runs = ['A0', 'A1', 'A4'].map((arm: string) => ({ seq: 'seqH', arm, seed: 1 }));
+  const runs = ARMS.map((arm: string) => ({ seq: 'seqH', arm, seed: 1 }));
+  const memory = loadAdapter(resolve(__dirname, 'fixtures', 'fake-memory.json'));
 
-  it('passes for every arm without memory with a hippo decoy on PATH, and removes the run dirs it made', () => {
+  it('passes for every arm with a hippo decoy on PATH, and removes the run dirs it made', () => {
     operatorWithCanaries();
     decoy();
     const out = tmp('z0-check-');
-    checkHomes({ outDir: out, runs, passEnv: [] });
-    expect(existsSync(join(out, 'runs', 'seqH', 'A0', 'seed1'))).toBe(false);
+    checkHomes({ outDir: out, runs, passEnv: [], adapter: memory });
+    for (const arm of ARMS) expect(existsSync(join(out, 'runs', 'seqH', arm, 'seed1')), arm).toBe(false);
+  }, 60_000);
+
+  it('stops at A2 when a key the manifest names is not set, before any session', () => {
+    operatorWithCanaries();
+    delete process.env.FAKEMEM_CHECK_KEY;
+    const out = tmp('z0-check-');
+    expect(() => checkHomes({ outDir: out, runs, passEnv: [], adapter: { ...memory, env: ['FAKEMEM_CHECK_KEY'] } })).toThrow(/fake-memory needs FAKEMEM_CHECK_KEY in the environment/);
+    expect(existsSync(join(out, 'runs', 'seqH', 'A2', 'seed1'))).toBe(false);
   }, 60_000);
 
   it('checkEnvHomes names the run when a home key points elsewhere or a home is not empty', () => {

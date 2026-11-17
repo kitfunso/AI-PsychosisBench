@@ -1,0 +1,120 @@
+{
+  "name": "hippo",
+  "version": "1.71.0",
+  "install": [
+    "node \"${AIPB_ADAPTER_DIR}/hippo/install.mjs\""
+  ],
+  "init": [
+    "hippo init --no-schedule",
+    "node \"${AIPB_ADAPTER_DIR}/hippo/pin-config.mjs\""
+  ],
+  "settings": {
+    "hooks": {
+      "SessionEnd": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "hippo session-end --log-file \"${AIPB_OUT}\\hook-home\\.hippo\\logs\\claude-code-sleep.log\"",
+              "timeout": 5
+            }
+          ]
+        }
+      ],
+      "SessionStart": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "hippo last-sleep --path \"${AIPB_OUT}\\hook-home\\.hippo\\logs\\claude-code-sleep.log\"",
+              "timeout": 5
+            }
+          ]
+        },
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "hippo session-rules",
+              "timeout": 5
+            }
+          ]
+        },
+        {
+          "matcher": "compact",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "hippo compact-resume",
+              "timeout": 10
+            }
+          ]
+        }
+      ],
+      "UserPromptSubmit": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "hippo context --pinned-only --include-recent 5 --format additional-context",
+              "timeout": 5
+            }
+          ]
+        }
+      ],
+      "PreCompact": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "hippo pre-compact --log-file \"${AIPB_OUT}\\hook-home\\.hippo\\logs\\pre-compact.log\"",
+              "timeout": 30
+            }
+          ]
+        }
+      ],
+      "PostCompact": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "hippo post-compact --log-file \"${AIPB_OUT}\\hook-home\\.hippo\\logs\\pre-compact.log\"",
+              "timeout": 10
+            }
+          ]
+        }
+      ],
+      "PostToolUseFailure": [
+        {
+          "matcher": ".*",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "hippo capture-error",
+              "timeout": 10
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "env": [
+    "HIPPO_CLI_JS"
+  ],
+  "namespaceEnv": [
+    "HIPPO_TENANT"
+  ],
+  "workDirs": [
+    ".hippo"
+  ],
+  "settleMs": 5000,
+  "export": [
+    "node \"${AIPB_ADAPTER_DIR}/hippo/export.mjs\""
+  ],
+  "reset": [
+    "node \"${AIPB_ADAPTER_DIR}/hippo/reset.mjs\""
+  ],
+  "hiddenWords": [
+    "hippo"
+  ]
+}

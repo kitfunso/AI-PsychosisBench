@@ -2,7 +2,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { injectedRows } from '../lib/surfaces.mjs';
 import {
-  cleanup, isolate, makeRepo, task, teach, apply, plain, lesson, family, spec, run, readRecords, readLedger, find,
+  cleanup, isolate, makeRepo, teach, apply, plain, lesson, family, spec, run, readRecords, find,
 } from './fixtures/z0-harness.js';
 
 /** Teach t1 with `t1`, two plain tasks, then applies a1 (passes its check) and a2; the arms run in one lockstep. */
@@ -35,8 +35,7 @@ describe('failure chain on applies', () => {
     expect(find(readRecords(out), 'A1', 'a1').chain).toMatchObject({ stored: true, shown: true, followed: true });
   }, 300_000);
 
-  // Needs a memory arm; stage 2 runs it on the fake adapter.
-  it.skip('A2 records whether hippo captured the teach, A5 never; teach, no-lesson and invalid records carry no chain', async () => {
+  it('A2 records whether its memory captured the teach, A5 never; teach, no-lesson and invalid records carry no chain', async () => {
     const { out } = isolate('chain-capture');
     const r = makeRepo();
     const s = spec(r, [family('f1', [lesson('f1-l1', 'Write the lesson file')])], [
@@ -51,8 +50,7 @@ describe('failure chain on applies', () => {
     expect(find(recs, 'A2', 'a2').invalid).toBe('setup');
   }, 300_000);
 
-  // Needs a memory arm; stage 2 runs it on the fake adapter.
-  it.skip('in A2 a hippo row holding the phrase that the hook adds to session 1 counts as shown', async () => {
+  it('in A2 a memory entry holding the phrase that the hook adds to session 1 counts as shown', async () => {
     const { out } = isolate('chain-hook');
     const r = makeRepo();
     const s = spec(r, [family('f1', [lesson('f1-l1', 'Write the lesson file')])], [
@@ -63,8 +61,7 @@ describe('failure chain on applies', () => {
     expect(find(readRecords(out), 'A2', 'a1').chain).toMatchObject({ stored: true, shown: true, followed: true });
   }, 300_000);
 
-  // Needs a memory arm; stage 2 runs it on the fake adapter.
-  it.skip('A2 without a captured teach gives captured false', async () => {
+  it('A2 without a captured teach gives captured false', async () => {
     const { out } = isolate('chain-nocapture');
     await run(chainSpec(makeRepo(), 'look around only'), ['A2'], out);
     expect(find(readRecords(out), 'A2', 'a1').chain).toMatchObject({ captured: false, capturedAny: false });
@@ -89,17 +86,4 @@ describe('injected-row sources', () => {
       ['agent-memory:claude-code', true], ['agent-memory:codex', false], ['cli', false],
     ]);
   });
-
-  // Needs a memory arm; stage 2 runs it on the fake adapter.
-  it.skip('in A2 an imported auto-memory note injected into a later session is counted and its source prefix logged', async () => {
-    const { out } = isolate('injected');
-    const r = makeRepo();
-    const s = spec(r, [], [
-      task(r, 'n1', 'NOTE:the frobnicate helper lives in quux.js\nIMPORT'), task(r, 'n2', 'where does the frobnicate helper in quux.js live'),
-    ]);
-    await run(s, ['A2'], out);
-    expect(find(readRecords(out), 'A2', 'n2').injectedRows?.importedRows).toBeGreaterThanOrEqual(1);
-    const line = readLedger(out).find((l) => l.when === 'injected' && l.taskId === 'n2');
-    expect(line?.rows?.map((x) => x.prefix)).toContain('agent-memory:claude-code');
-  }, 300_000);
 });

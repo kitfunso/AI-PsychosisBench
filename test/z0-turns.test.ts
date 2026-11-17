@@ -11,7 +11,7 @@ import { teachMessage, drawOrder } from '../lib/lessons.mjs';
 import { stateCommit, holdPre, dropPre, runCheck } from '../lib/checks.mjs';
 import { stubBaseCommit, STUB_CLAUDE_MD } from '../lib/workspace.mjs';
 import { runScreen } from '../lib/screen.mjs';
-import { fixtureEnv } from './fixtures/z0-harness.js';
+import { fixtureEnv, FAKE_MEMORY } from './fixtures/z0-harness.js';
 import { validateCorpus, type Z0Record, type Z0PlanCell } from './fixtures/z0-contract.js';
 
 const FAKE = resolve(__dirname, 'fixtures', 'fake-claude.mjs');
@@ -95,7 +95,7 @@ const spec = (r: FixtureRepo, families: FamilyDef[], tasks: TaskDef[]): Spec => 
 const reversal = (l1: Partial<LessonDef> = {}, l2: Partial<LessonDef> = {}) => family('f1', [lesson('f1-l1', 'Write the lesson file', l1), lesson('f1-l2', 'Write the lesson file twice', { supersedes: 'f1-l1', ...l2 })]);
 
 async function run(s: ReturnType<typeof spec>, arms: string[], out: string, extra: RunExtra = {}) {
-  return runAll({ spec: s, arms, seeds: 1, outDir: out, model: null, claudeBin: CLAUDE, settleMs: 0, warmup: false, log: () => {}, passEnv: fixtureEnv(), ...extra });
+  return runAll({ spec: s, arms, seeds: 1, outDir: out, model: null, claudeBin: CLAUDE, adapter: FAKE_MEMORY, warmup: false, log: () => {}, passEnv: fixtureEnv(), ...extra });
 }
 const readRecords = (out: string): Z0Record[] => readFileSync(join(out, 'runs.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
 const readPlan = (out: string): Z0PlanCell[] => JSON.parse(readFileSync(join(out, 'plan.json'), 'utf8'));
@@ -104,8 +104,7 @@ const checkLog = (log: string): CheckLine[] => logLines(log).filter((l) => l.sta
 const seen = (out: string, arm: string, id: string): Record<string, string> => JSON.parse(readFileSync(join(out, 'raw', 'seqF', arm, 'seed1', `${id}.json`), 'utf8')).files;
 const find = (recs: Z0Record[], arm: string, id: string) => recs.find((x) => x.arm === arm && x.taskId === id)!;
 const workDir = (out: string, arm: string) => join(out, 'runs', 'seqF', arm, 'seed1', 'work');
-// The arms that run without a memory adapter; A2 and A5 join once lib/adapter.mjs lands.
-const PLAIN_ARMS = ['A0', 'A1', 'A4'];
+const FIVE_ARMS = ['A0', 'A1', 'A2', 'A4', 'A5'];
 const ZERO = { inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 0 };
 const INVALID_NULLS: readonly (keyof Z0Record)[] = ['usage', 'costUsd', 'turns', 'toolCalls', 'fileReads', 'wallMs', 'teachTurns', 'correctionTurns', 'acceptancePassed', 'teachForm'];
 
@@ -220,21 +219,21 @@ describe('transcript reads across turns', () => {
 });
 
 describe('Z0 lesson tasks end to end (fake Claude Code)', () => {
-  it('runs a reversal family in every arm without memory; every record meets the z0-record/1 contract', async () => {
+  it('runs a reversal family in all five arms; every record meets the z0-record/1 contract', async () => {
     const { out, log } = isolate('e2e');
     const r = makeRepo();
     const s = spec(r, [reversal()], [
       teach(r, 't1', 'f1-l1', 'LESSON_OK'), plain(r, 'n1'), task(r, 'n2', 'FIX add in lib.js'), apply(r, 'a1', 'f1-l1', 'LESSON_BAD\nRUN_CMD npm run lint'),
       teach(r, 't2', 'f1-l2', 'LESSON_BAD'), plain(r, 'n3'), plain(r, 'n4'), apply(r, 'a3', 'f1-l2', 'LESSON_OK'),
     ]);
-    await run(s, PLAIN_ARMS, out);
+    await run(s, FIVE_ARMS, out);
     const recs = readRecords(out);
-    expect(recs).toHaveLength(8 * PLAIN_ARMS.length);
+    expect(recs).toHaveLength(8 * FIVE_ARMS.length);
     const plan = readPlan(out);
     expect(validateCorpus(recs, plan)).toEqual([]);
     const cells = (xs: Z0PlanCell[]) => xs.map((x) => JSON.stringify([x.seed, x.position, x.arm, x.sequence, x.taskId, x.set, x.kind, x.familyId])).sort();
     expect(cells(plan)).toEqual(cells(recs));
-    for (const arm of PLAIN_ARMS) {
+    for (const arm of FIVE_ARMS) {
       const get = (id: string) => find(recs, arm, id);
       expect(get('t1'), arm).toMatchObject({ kind: 'teach', set: 'R', teachTurns: 1, correctionTurns: 0, teachForm: 'confirmation', lessons: [{ lessonId: 'f1-l1', first: 'pass', final: 'pass', staleFollow: null }] });
       expect(get('t1').usage?.extra.outputTokens, arm).toBeGreaterThan(0);
@@ -250,9 +249,9 @@ describe('Z0 lesson tasks end to end (fake Claude Code)', () => {
     }
     // CHECK_COMMANDS: session one's commands at the first check, then the correction turn's too at the final check.
     const a1Checks = checkLog(log).filter((c) => c.commands.includes('npm run lint'));
-    expect(a1Checks).toHaveLength(2 * PLAIN_ARMS.length);
+    expect(a1Checks).toHaveLength(2 * FIVE_ARMS.length);
     for (const c of a1Checks) expect(c.commands.slice(0, 2)).toEqual(['git status && cat lib.js', 'npm run lint']);
-    expect(a1Checks.filter((c) => c.commands.length === 3).map((c) => c.commands[2])).toEqual(Array(PLAIN_ARMS.length).fill('echo resumed No:'));
+    expect(a1Checks.filter((c) => c.commands.length === 3).map((c) => c.commands[2])).toEqual(Array(FIVE_ARMS.length).fill('echo resumed No:'));
     expect(a1Checks.map((c) => c.resume)).toEqual(a1Checks.map((c) => (c.commands.length === 3 ? ['echo resumed No:'] : null)));
   }, 600_000);
 
@@ -280,9 +279,9 @@ describe('Z0 lesson tasks end to end (fake Claude Code)', () => {
 
     const out2 = tmp('z0-turns-out-diff2-');
     const quiet = family('f1', [lesson('f1-l1', 'Leave instruction files alone', { check: { script: 'diff.mjs', args: [] } })]);
-    await run(spec(r, [quiet], [plain(r, 'c0'), teach(r, 't1', 'f1-l1', 'look around only'), plain(r, 'n1'), plain(r, 'n2'), apply(r, 'a1', 'f1-l1', 'look around only'), apply(r, 'a2', 'f1-l1', 'CARRY')].map((t) => (t.id === 'c0' ? { ...t, prompt: 'CARRY' } : t))), ['A1', 'A4'], out2);
+    await run(spec(r, [quiet], [plain(r, 'c0'), teach(r, 't1', 'f1-l1', 'look around only'), plain(r, 'n1'), plain(r, 'n2'), apply(r, 'a1', 'f1-l1', 'look around only'), apply(r, 'a2', 'f1-l1', 'CARRY')].map((t) => (t.id === 'c0' ? { ...t, prompt: 'CARRY' } : t))), ['A1', 'A2', 'A4'], out2);
     const b = readRecords(out2);
-    for (const arm of ['A1', 'A4']) {
+    for (const arm of ['A1', 'A2', 'A4']) {
       expect(find(b, arm, 't1').lessons[0].first, arm).toBe('pass');
       expect(find(b, arm, 'a1').lessons[0].first, arm).toBe('pass');
       expect(find(b, arm, 'a2').lessons[0].first, arm).toBe('fail');
@@ -311,16 +310,18 @@ describe('Z0 lesson tasks end to end (fake Claude Code)', () => {
     expect(find(recs, 'A0', 'a4').lessons[0].staleFollow).toBe(false);
   }, 300_000);
 
-  it('end-of-task steps run after the last turn: a resume-written line carries', async () => {
+  it('end-of-task steps run after the last turn: a resume-written line carries, and the memory settles before the resume and at the end', async () => {
     const { out } = isolate('carry');
     const r = makeRepo();
     const fam = family('f1', [lesson('f1-l1', 'Write the lesson file')]);
-    await run(spec(r, [fam], [teach(r, 't1', 'f1-l1', 'LESSON_OK\nWRITE_ON_RESUME taught-line-xyz'), plain(r, 'n1'), plain(r, 'n2'), apply(r, 'a1', 'f1-l1', 'look around only'), apply(r, 'a2', 'f1-l1', 'look around only')]), ['A1'], out);
-    for (const arm of ['A1']) {
+    await run(spec(r, [fam], [teach(r, 't1', 'f1-l1', 'LESSON_OK\nWRITE_ON_RESUME taught-line-xyz'), plain(r, 'n1'), plain(r, 'n2'), apply(r, 'a1', 'f1-l1', 'look around only'), apply(r, 'a2', 'f1-l1', 'look around only')]), ['A1', 'A2'], out);
+    for (const arm of ['A1', 'A2']) {
       expect(seen(out, arm, 't1')['CLAUDE.md'], arm).not.toContain('taught-line-xyz');
       for (const id of ['n1', 'n2']) expect(seen(out, arm, id)['CLAUDE.md'], `${arm} ${id}`).toContain('taught-line-xyz');
     }
     expect(existsSync(join(out, 'runs', 'seqF', 'A1', 'seed1', 'settle.log'))).toBe(false);
+    const settle = readFileSync(join(out, 'runs', 'seqF', 'A2', 'seed1', 'settle.log'), 'utf8').trim().split('\n');
+    expect(settle).toEqual(['t1 pre-resume', 't1 end', 'n1 end', 'n2 end', 'a1 end', 'a2 end']);
   }, 300_000);
 });
 
@@ -616,15 +617,15 @@ describe('usage limits around resumes', () => {
       teach(r, 't1', 'f1-l1', 'LIMIT LESSON_BAD', { baseRef: r.fix }), plain(r, 'n1'), plain(r, 'n2'), apply(r, 'a1', 'f1-l1', 'look around only'), apply(r, 'a2', 'f1-l1', 'look around only'),
     ]);
     const said: string[] = [];
-    await run(s, ['A1'], out, { limitWaitMs: 0, log: (m: string) => said.push(m) });
-    const t1 = find(readRecords(out), 'A1', 't1');
-    expect(t1).toMatchObject({ invalid: null, limitRetries: 1, baseCommit: newer, lessons: [{ first: 'fail', final: 'pass' }] });
-    expect(said.some((m) => /t1 A1 seed1: CHECK_PRE_COMMIT rebuilt/.test(m))).toBe(true);
+    await run(s, ['A2'], out, { limitWaitMs: 0, log: (m: string) => said.push(m) });
+    const t1 = find(readRecords(out), 'A2', 't1');
+    expect(t1).toMatchObject({ invalid: null, void: null, limitRetries: 1, baseCommit: newer, lessons: [{ first: 'fail', final: 'pass' }] });
+    expect(said.some((m) => /t1 A2 seed1: CHECK_PRE_COMMIT rebuilt/.test(m))).toBe(true);
     const checks = checkLog(log);
     for (const c of checks) expect(c.preRef).toBe(c.pre);
     expect(checks.slice(0, 2).map((c) => c.has)).toEqual([true, true]);
     expect(checks.slice(2).map((c) => c.has)).toEqual(Array(checks.length - 2).fill(false));
-    const refs = execFileSync('git', ['for-each-ref', '--format=%(refname)', 'refs/z0'], { cwd: workDir(out, 'A1'), encoding: 'utf8' });
+    const refs = execFileSync('git', ['for-each-ref', '--format=%(refname)', 'refs/z0'], { cwd: workDir(out, 'A2'), encoding: 'utf8' });
     expect(refs.trim()).toBe('');
   }, 300_000);
 
@@ -689,7 +690,7 @@ describe('family screen', () => {
       ...ids.map((f) => teach(r, `t${f}`, `${f}-l1`, 'LESSON_BAD')), plain(r, 'n1'), plain(r, 'n2'),
       ...ids.map((f) => apply(r, `a${f}1`, `${f}-l1`, 'look around only')), ...ids.map((f) => apply(r, `a${f}2`, `${f}-l1`, 'look around only')),
     ]);
-    const v = await runScreen({ spec: s, outDir: out, claudeBin: CLAUDE, settleMs: 0, warmup: false, log: () => {} });
+    const v = await runScreen({ spec: s, outDir: out, claudeBin: CLAUDE, warmup: false, log: () => {} });
     expect(v.kept).toEqual(['fK']);
     expect(v.families.find((f: { familyId: string }) => f.familyId === 'fK')).toMatchObject({ a0Breaks: 3, a0Of: 4, a4Follows: 2, a4Of: 2 });
     expect(v.dropped).toEqual([{ familyId: 'fD', a0Breaks: 4, a0Of: 4, a4Follows: 1, a4Of: 2, verdict: 'dropped' }]);
@@ -710,7 +711,7 @@ describe('family screen', () => {
     const fam: FamilyDef = { ...family('fK', [lesson('fK-l1', 'Write the fK file')]), screen: { id: 'fK-screen', baseRef: r.base, fixRef: r.fix, prompt: 'LESSON_TOLD SEED2_OK', test: 'node test.js', testFiles: ['test.js'] } };
     const s = spec(r, [fam], [teach(r, 'tK', 'fK-l1', 'LESSON_BAD'), plain(r, 'n1'), plain(r, 'n2'), apply(r, 'aK1', 'fK-l1', 'look around only'), apply(r, 'aK2', 'fK-l1', 'look around only')]);
     const withX = { ...s, sequences: [...s.sequences, { id: 'seqX', cluster: 'c', repo: r.repo, fixedOrder: true, set: 'X', tasks: [plain(r, 'x1'), plain(r, 'x2')] }] };
-    const v = await runScreen({ spec: withX, arms: ['X1', 'X2'], outDir: out, claudeBin: CLAUDE, settleMs: 0, warmup: false, log: () => {} });
+    const v = await runScreen({ spec: withX, arms: ['X1', 'X2'], outDir: out, claudeBin: CLAUDE, warmup: false, log: () => {} });
     expect(v.families.map((f: { familyId: string }) => f.familyId)).toEqual(['fK']);
     const recs: Z0Record[] = readFileSync(join(out, 'screen.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
     expect([...new Set(recs.map((x) => x.arm))].sort()).toEqual(['A0', 'A4']);
@@ -725,7 +726,7 @@ describe('family screen', () => {
     g('commit', '-qm', 'link');
     const fam = { ...family('fL', [lesson('fL-l1', 'Write the fL file')]), screen: { id: 'fL-screen', baseRef: g('rev-parse', 'HEAD'), fixRef: r.fix, prompt: 'x', test: 'node test.js', testFiles: ['test.js'] } };
     const s = spec(r, [fam], [teach(r, 'tL', 'fL-l1', 'LESSON_BAD'), plain(r, 'n1'), plain(r, 'n2'), apply(r, 'aL1', 'fL-l1', 'x'), apply(r, 'aL2', 'fL-l1', 'x')]);
-    await expect(runScreen({ spec: s, outDir: out, claudeBin: CLAUDE, settleMs: 0, warmup: false, log: () => {} }))
+    await expect(runScreen({ spec: s, outDir: out, claudeBin: CLAUDE, warmup: false, log: () => {} }))
       .rejects.toThrow('Z0 task seqF/fL-screen: instruction file docs/AGENTS.md is a symlink in the task repo');
     expect(logLines(log)).toEqual([]);
   }, 60_000);
