@@ -1,6 +1,6 @@
 ---
 license: other
-license_name: per-repo-upstream-licences
+license_name: cc-by-4.0-and-upstream-licences
 pretty_name: AI-PsychosisBench r3 v1
 tags:
   - benchmark
@@ -33,7 +33,9 @@ Each sequence's `repo` in `tasks.json` is `repo.bundle`, the bundle beside that 
 
 ## Licences
 
-Each repository keeps its own upstream licence. The table shows the licence our script detected from the licence text. Read the `LICENSE` file in each folder for the exact terms.
+The task files (`tasks.json`) and the check scripts (`checks/`) are licensed under CC-BY-4.0 (https://creativecommons.org/licenses/by/4.0/).
+
+Each repository bundle keeps its own upstream licence, in the `LICENSE` file beside it. The table shows the licence our script detected from the licence text. Read the `LICENSE` file in each folder for the exact terms.
 
 <!-- LICENSE-TABLE:START -->
 | repo key | licence |

@@ -4,6 +4,7 @@
   "description": "A repeat-mistake benchmark for coding-agent memory, cut from hippo Z0 round 3.",
   "type": "module",
   "private": true,
+  "license": "MIT",
   "bin": {
     "ai-psychosisbench": "lib/ab-run.mjs"
   },
