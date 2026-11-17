@@ -3,9 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { SLUG } from '../lib/name.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const dir = path.resolve(process.argv[2] ?? path.join(HERE, '..', 'out', 'ai-psychosis-bench-r3-v1'));
+const dir = path.resolve(process.argv[2] ?? path.join(HERE, '..', 'out', `${SLUG}-r3-v1`));
 const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
 const bad = [];
 const listed = new Set();
