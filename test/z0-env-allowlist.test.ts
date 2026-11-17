@@ -1,7 +1,7 @@
 // Z0 round 3 prereg item 5a: the arm env is an allowlist, armEnv refuses a secret-shaped name, and G1 reads each record's envKeys.
 import { describe, it, expect } from 'vitest';
 import { delimiter } from 'node:path';
-import { armEnv, ARMS, ENV_ALLOWLIST, SECRET_SHAPED, TOKEN_KEY } from '../lib/arms.mjs';
+import { API_KEY, armEnv, ARMS, childEnv, ENV_ALLOWLIST, SECRET_SHAPED, TOKEN_KEY } from '../lib/arms.mjs';
 import { runDirs } from '../lib/homes.mjs';
 import { g1 } from '../lib/z0-gates.mjs';
 
@@ -14,7 +14,8 @@ describe('armEnv allowlist (item 5a)', () => {
     const operator = Object.fromEntries(SECRETS.map((k) => [k, 'v']));
     for (const arm of ARMS) {
       const env = armEnv(arm, { ...run, seed: 1 }, base({ ...operator, FAKE_SERVICE_PASSWORD: 'x', ANTHROPIC_API_KEY: 'a', UNLISTED_NAME: 'u' }));
-      for (const k of [...SECRETS, 'FAKE_SERVICE_PASSWORD', 'ANTHROPIC_API_KEY', 'UNLISTED_NAME']) expect(env, `${arm} ${k}`).not.toHaveProperty(k);
+      for (const k of [...SECRETS, 'FAKE_SERVICE_PASSWORD', 'UNLISTED_NAME']) expect(env, `${arm} ${k}`).not.toHaveProperty(k);
+      expect(env[API_KEY], arm).toBe('a');
       expect([env.TEMP, env.JAVA_HOME, env.GRADLE_USER_HOME, env[TOKEN_KEY]], arm).toEqual(['/tmp', '/jdk', '/gradle', 'tok']);
       expect(Object.keys(env).every((k) => ENV_ALLOWLIST.some((n) => n.toUpperCase() === k.toUpperCase())), arm).toBe(true);
     }
@@ -29,9 +30,9 @@ describe('armEnv allowlist (item 5a)', () => {
     expect([env.CLAUDE_CONFIG_DIR, env.EVAL_SEED]).toEqual([run.claudeConfig, '1']);
   });
 
-  it('lists no secret-shaped name but the token, no ANTHROPIC_ name and no repeat', () => {
-    expect(ENV_ALLOWLIST.filter((n) => n.toUpperCase() !== TOKEN_KEY && SECRET_SHAPED.test(n))).toEqual([]);
-    expect(ENV_ALLOWLIST.filter((n) => /^ANTHROPIC_/i.test(n))).toEqual([]);
+  it('lists no secret-shaped name but the token and the API key, no other ANTHROPIC_ name and no repeat', () => {
+    expect(ENV_ALLOWLIST.filter((n) => ![TOKEN_KEY, API_KEY].includes(n.toUpperCase()) && SECRET_SHAPED.test(n))).toEqual([]);
+    expect(ENV_ALLOWLIST.filter((n) => /^ANTHROPIC_/i.test(n))).toEqual([API_KEY]);
     const upper = ENV_ALLOWLIST.map((n) => n.toUpperCase());
     expect(new Set(upper).size).toBe(upper.length);
     expect(Object.isFrozen(ENV_ALLOWLIST)).toBe(true);
@@ -53,6 +54,15 @@ describe('armEnv allowlist (item 5a)', () => {
     expect(() => armEnv('A1', { ...run, seed: 1 }, base(), { allowlist: list })).not.toThrow();
   });
 
+  it('gives the session an API key as it gives the token, and childEnv strips both from setup, tests and checkers', () => {
+    const env = armEnv('A2', { ...run, seed: 1 }, base({ anthropic_api_key: 'k' }));
+    expect([env[TOKEN_KEY], env[API_KEY]]).toEqual(['tok', 'k']);
+    // An empty one is unset, so it names no auth mode in envKeys.
+    const empty = armEnv('A2', { ...run, seed: 1 }, base({ [TOKEN_KEY]: '', ANTHROPIC_API_KEY: '' }));
+    expect(Object.keys(empty).filter((k) => [TOKEN_KEY, API_KEY].includes(k.toUpperCase()))).toEqual([]);
+    expect(Object.keys(childEnv(env)).filter((k) => [TOKEN_KEY, API_KEY].includes(k.toUpperCase()))).toEqual([]);
+  });
+
   it('throws on a --pass-env name that looks like a secret, and lets the token through', () => {
     expect(() => armEnv('A1', { ...run, seed: 1 }, base({ GOOGLE_API_KEY: 'v' }), { passEnv: ['GOOGLE_API_KEY'] })).toThrow(/GOOGLE_API_KEY.*ENV_ALLOWLIST/);
     expect(() => armEnv('A1', { ...run, seed: 1 }, base())).not.toThrow();
@@ -65,17 +75,27 @@ describe('G1 envKeys conditions (item 5a)', () => {
 
   it('passes records whose envKeys sit inside the allowlist, in any case, and records with no envKeys', () => {
     const r = g1([rec(clean), rec(['PROGRAMFILES(X86)', 'programdata', 'Path', ...clean]), rec()], {});
-    expect(r).toMatchObject({ pass: true, operatorCanaries: 0, envKeysOutside: {}, anthropicApiKeyRecords: 0 });
+    expect(r).toMatchObject({ pass: true, operatorCanaries: 0, envKeysOutside: {}, mixedAuth: false });
   });
 
   it('fails a record that holds GITHUB_PERSONAL_ACCESS_TOKEN and counts the records for each name', () => {
     const r = g1([rec([...clean, 'GITHUB_PERSONAL_ACCESS_TOKEN', 'SUPABASE_DB_DSN']), rec([...clean, 'github_personal_access_token']), rec(clean)], {});
-    expect(r).toMatchObject({ pass: false, operatorCanaries: 0, envKeysOutside: { GITHUB_PERSONAL_ACCESS_TOKEN: 2, SUPABASE_DB_DSN: 1 }, anthropicApiKeyRecords: 0 });
+    expect(r).toMatchObject({ pass: false, operatorCanaries: 0, envKeysOutside: { GITHUB_PERSONAL_ACCESS_TOKEN: 2, SUPABASE_DB_DSN: 1 }, mixedAuth: false });
   });
 
-  it('fails a record that holds ANTHROPIC_API_KEY and counts it on its own line too', () => {
-    const r = g1([rec([...clean, 'Anthropic_Api_Key']), rec(clean)], {});
-    expect(r).toMatchObject({ pass: false, envKeysOutside: { ANTHROPIC_API_KEY: 1 }, anthropicApiKeyRecords: 1 });
+  it('passes an API-key run, and fails a run that mixes API-key and OAuth records', () => {
+    const keyed = rec([...clean.filter((k) => k !== TOKEN_KEY), 'Anthropic_Api_Key']);
+    expect(g1([keyed, keyed], {})).toMatchObject({ pass: true, envKeysOutside: {}, authModes: { oauth: 0, apikey: 2 }, mixedAuth: false });
+    expect(g1([keyed, rec(clean)], {})).toMatchObject({ pass: false, envKeysOutside: {}, authModes: { oauth: 1, apikey: 1 }, mixedAuth: true });
+    // A record's own auth field wins over its env names.
+    expect(g1([{ ...rec(clean), auth: 'apikey' }, rec(clean)], {})).toMatchObject({ pass: false, mixedAuth: true });
+  });
+
+  it('passes the memory manifest\'s own key names only when G1 is given them', () => {
+    const r = [rec([...clean, 'MEM0_API_KEY', 'mem0_org_id'])];
+    expect(g1(r, {})).toMatchObject({ pass: false, envKeysOutside: { MEM0_API_KEY: 1, MEM0_ORG_ID: 1 } });
+    expect(g1(r, {}, ['MEM0_API_KEY', 'MEM0_ORG_ID'])).toMatchObject({ pass: true, envKeysOutside: {} });
+    expect(g1(r, {}, ['mem0_api_key'])).toMatchObject({ pass: false, envKeysOutside: { MEM0_ORG_ID: 1 } });
   });
 
   it('reads the 11 round 2 operator secret names as outside the list', () => {

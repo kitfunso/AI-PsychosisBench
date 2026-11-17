@@ -1,13 +1,13 @@
 // Z0 G5 (prereg 166, 179): the reader sample's seeded draw, blinding, labels and scoring, and the stored sample's statistics.
 import { describe, it, expect, afterEach } from 'vitest';
 import { existsSync, readFileSync, readdirSync, renameSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { agentGit } from '../lib/checks.mjs';
 import { readerDiff } from '../lib/grading.mjs';
 import { runCli as analyze } from '../lib/z0-analyze.mjs';
 import { checkerIdentity } from '../lib/checker-identity.mjs';
-import { equalShares, fillStrata, kappa, parseLabels, seededOrder, shellSegments, visibleCommand, wilson } from '../lib/g5-draw.mjs';
+import { equalShares, fillStrata, forbiddenWords, hiddenWords, isHiddenCommand, kappa, parseLabels, seededOrder, shellSegments, visibleCommand, wilson } from '../lib/g5-draw.mjs';
 import { assertCheckersJudged, pairDiff } from '../lib/reader-sample.mjs';
 import { listGrades, writeRegraded } from '../lib/regrade.mjs';
 import { g5 } from '../lib/z0-gates.mjs';
@@ -18,6 +18,8 @@ import { PHRASE, SEQ, bundledOut, cli, gradeDir, readJson, rowOf, runRoot, seale
 
 const win = process.platform === 'win32';
 const ARM_WORD = /\b(A0|A1|A2|A4|A5|X1|X2|X3|X4)\b/;
+// Its hiddenWords are ["fakemem"].
+const MANIFEST = resolve(__dirname, 'fixtures', 'fake-memory.json');
 interface KeyPair { file: string; pairId: string; key: string; lessonId: string; arm: string; verdict: string; stratum: string }
 const cells = (arm: string, verdicts: Verdict[], from = 0): Cell[] => verdicts.map((first, i) => ({ arm, position: from + i, first }));
 const many = (v: Verdict, k: number): Verdict[] => Array.from({ length: k }, () => v);
@@ -166,7 +168,7 @@ describe('reader sample draw', () => {
       'hippo context --auto | head -40',
       'echo "unterminated; hippo',
     ];
-    expect(commands.map(visibleCommand)).toEqual([
+    expect(commands.map((c) => visibleCommand(c))).toEqual([
       'cd w; npm run build 2>&1 | tail -15', 'npm test', 'cat <<EOF > notes.txt\nkeep; this\nEOF', 'npx vitest run', null, null,
     ]);
     expect(shellSegments("python - <<'EOF'\nprint(1); print(2)\nEOF\nnpm test")?.map((s) => s.before)).toEqual(['', '\n']);
@@ -177,6 +179,25 @@ describe('reader sample draw', () => {
     expect(text).toContain('keep; this');
     for (const bad of ['hippo', 'remember', 'outcome', 'recall', 'context']) expect(text).not.toContain(bad);
     expect(pairsOf(s.out)[0]).toMatchObject({ droppedCommands: 2 });
+  });
+
+  it('hides the memory manifest\'s hiddenWords as it hides hippo, so no pair names the memory that ran (G5, version 1)', () => {
+    expect(isHiddenCommand('fakemem add x')).toBe(false);
+    expect(isHiddenCommand('fakemem add x', hiddenWords(['fakemem']))).toBe(true);
+    expect(visibleCommand('fakemem add "a; b"; npm test', hiddenWords(['fakemem']))).toBe('npm test');
+    expect(visibleCommand('hippo recall x; npm test', hiddenWords(['fakemem']))).toBe('npm test');
+    expect(forbiddenWords(['fakemem'])).toEqual(expect.arrayContaining(['fakemem', 'hippo', '.hippo', '[tool]']));
+    const cellsOf = () => [{ arm: 'A2', position: 0, commands: ['fakemem recall x', 'fakemem add y && npm test'] }, { arm: 'A2', position: 1, diff: 'diff --git a/lib.js b/lib.js\n+// ask fakemem first\n' }];
+    const plain = synthOut(cellsOf());
+    expect(draw(plain.out, plain.tasks)).toMatchObject({ code: 0 });
+    expect(sealedKey(plain.out, 'reader-r1.key.json')).toMatchObject({ unblindable: 0 });
+    const s = synthOut(cellsOf());
+    expect(draw(s.out, s.tasks, ['--memory', MANIFEST])).toMatchObject({ code: 0 });
+    const key = sealedKey(s.out, 'reader-r1.key.json');
+    expect(key).toMatchObject({ unblindable: 1, pairs: [{ file: 'p01', droppedCommands: 1 }] });
+    const text = readFileSync(join(s.out, 'g5', 'reader-r1', 'p01.md'), 'utf8');
+    expect(text).toContain('npm test');
+    expect(text.toLowerCase()).not.toContain('fakemem');
   });
 
   it('keeps a pair that names the run name as a plain word, since every arm shares it; only its path forms are forbidden (25b)', () => {
@@ -500,6 +521,20 @@ describe('stored sample (179)', () => {
     expect(st.ci95[1]).toBeCloseTo(0.9266, 4);
     expect(wilson(25, 30)?.map((x) => Number(x.toFixed(4)))).toEqual([0.6644, 0.9266]);
     expect(kappa({ yesYes: 4, yesNo: 0, noYes: 0, noNo: 0 })).toBeNull();
+  });
+
+  it('blinds the memory manifest\'s hiddenWords to [tool] in stored texts, as it blinds hippo (version 1)', () => {
+    const s = storedOut();
+    for (const f of readdirSync(join(s.out, 'grading'), { recursive: true, withFileTypes: true }).filter((e) => e.name.endsWith('.surfaces.txt'))) {
+      const file = join(f.parentPath, f.name);
+      writeFileSync(file, readFileSync(file, 'utf8').replace(/hippo keeps/g, 'FakeMem keeps'));
+    }
+    expect(cli(['stored', '--out', s.out, '--tasks', s.tasks, '--seed', '3', '--memory', MANIFEST])).toMatchObject({ code: 0 });
+    expect(sealedKey(s.out, 'stored.key.json')).toMatchObject({ eligible: 30, unblindable: 0 });
+    const dir = join(s.out, 'g5', 'stored');
+    const blind = readdirSync(dir).filter((f) => f.endsWith('.md')).map((f) => readFileSync(join(dir, f), 'utf8')).join('\n');
+    expect(blind.toLowerCase()).not.toContain('fakemem');
+    expect(blind).toContain('[tool] keeps');
   });
 
   it('a scored stored sample is final: the same labels print the score again, other labels are refused (179)', () => {

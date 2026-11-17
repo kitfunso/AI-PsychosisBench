@@ -262,7 +262,7 @@ describe('Z0 lesson tasks end to end (fake Claude Code)', () => {
       teach(r, 't1', 'f1-l1', 'LESSON_OK'), plain(r, 'n1'), plain(r, 'n2'), apply(r, 'a1', 'f1-l1', 'LESSON_OK'), apply(r, 'a2', 'f1-l1', 'LESSON_OK'),
     ]);
     await expect(run(s, ['A0'], out, { pins: { claudeVersion: '0.0.0', model: 'claude-sonnet-5-5' } }))
-      .rejects.toThrow(/differs from --pins: model is pinned claude-sonnet-5-5, this run has null$/);
+      .rejects.toThrow(/differs from --pins: model is pinned claude-sonnet-5-5, this run has null\. To fix it, .*--allow-off-pin/);
     expect(existsSync(join(out, 'runs.jsonl'))).toBe(false);
     expect(logLines(log)).toEqual([]);
   }, 120_000);

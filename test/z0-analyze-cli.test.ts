@@ -189,6 +189,18 @@ describe('Z0 CLI and blind mode', () => {
     expect(run()).toMatchObject({ code: 0, stdout: expect.stringContaining('hook-voided: 1 positions') });
   });
 
+  it('G1 passes the memory manifest\'s own key names only under --memory', () => {
+    const g = fresh();
+    g.records[at(g.records, 'A2', 'rn-repo2', 1, 7)]!.envKeys = ['PATH', 'MEM0_API_KEY'];
+    const dir = workspace(g);
+    fs.writeFileSync(path.join(dir, 'mem0.json'), JSON.stringify({ name: 'mem0', version: '1.0.0', settings: {}, env: ['MEM0_API_KEY'], export: ['mem0 export'], hiddenWords: ['mem0'] }));
+    const without = runCli([...ARGS, '--iterations', '300'], dir);
+    expect(without.stdout).toMatch(/^G1 fail: 0 operator canaries; env names outside the allowlist: MEM0_API_KEY in 1;/m);
+    const withMemory = runCli([...ARGS, '--iterations', '300', '--memory', 'mem0.json'], dir);
+    expect(withMemory).toMatchObject({ code: 0 });
+    expect(withMemory.stdout).toMatch(/^G1 pass: 0 operator canaries; void share/m);
+  });
+
   it('--help prints the usage and exits 0', () => {
     expect(runCli(['--help'])).toMatchObject({ code: 0, stdout: expect.stringMatching(/^usage: z0-analyze\.mjs --runs FILE/) });
   });

@@ -17,6 +17,7 @@ export interface Z0Record extends Z0PlanCell {
   acceptancePassed: boolean | null; timedOut: boolean; leak: boolean; resolved: boolean; invalid: string | null; void: string | null;
   surfaceRestored?: boolean; chain?: Z0Chain;
   limitRetries: number | null; carryUnionMerges: number | null; carryMerges?: number;
+  auth?: 'oauth' | 'apikey' | null; memory?: { name: string; version: string; manifestSha256: string };
   baseCommit?: string | null; sessionId: string | null; resumeSessionId: string | null; transcriptFound: boolean; hippo: object | null; agentError: string | null;
 }
 
@@ -45,6 +46,8 @@ function checkIdentity(r: Z0Record) {
   check(r.schema === 'z0-record/1', 'schema');
   check(r.set === 'R' || r.set === 'N', 'set must be R or N here');
   check(r.tool === 'claude-code', 'tool');
+  check(isNullish(r.auth) || r.auth === 'oauth' || r.auth === 'apikey', 'auth');
+  check(r.memory === undefined || (isPlain(r.memory) && isName(r.memory.name) && isName(r.memory.version) && /^[0-9a-f]{64}$/.test(r.memory.manifestSha256)), 'memory');
   check(isName(r.repo) && isName(r.sequence) && isName(r.taskId), 'repo, sequence, taskId');
   check(Number.isInteger(r.seed) && r.seed >= 1 && r.seed <= 3 && !(r.seed === 3 && TWO_SEED_ARMS.has(r.arm)), 'seed');
   check(RN_ARMS.includes(r.arm), `arm ${r.arm}`);
