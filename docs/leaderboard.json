@@ -5,7 +5,7 @@
     {
       "label": "hippo, round 3 run",
       "memory": "hippo",
-      "version": "1.71.0",
+      "version": "3.3.1 (round 3 build)",
       "learns": {
         "estimate": 0.008928571428567213,
         "low": -0.0517900686942267,

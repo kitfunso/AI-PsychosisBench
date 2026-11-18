@@ -16,14 +16,43 @@ Each task runs in five setups (arms):
 | A1 | Claude Code's built-in memory |
 | A2 | the memory under test |
 | A4 | no memory; the taught lessons are written into `CLAUDE.md` |
-| A5 | the memory under test with a new namespace for each task, so it cannot carry a lesson (the decoy) |
+| A5 | the memory under test, fully installed, with a new namespace for each task, so it cannot carry a lesson (the decoy) |
 
 Gates G1 to G5 check that the run is valid. A run with a failed gate gets no score. A valid run gets two numbers, each a difference in the share of lessons failed on the first try, with a 95% interval:
 
 - **vs built-in** (H1): A2 minus A1. Below zero means the memory repeats fewer mistakes than Claude Code's built-in memory.
 - **learns**: A2 minus A5. Below zero means the memory helps because it carries lessons, not because it is installed.
 
-The leaderboard is `docs/index.html`. It reads `docs/leaderboard.json`, which `node lib/leaderboard.mjs` builds from the `score --json` files that `docs/scores/rows.json` lists. Round 3 gives hippo 1.71.0 its row: learns +0.009 [-0.052, 0.070], vs built-in -0.149 [-0.243, -0.055].
+The leaderboard is `docs/index.html`. It reads `docs/leaderboard.json`, which `node lib/leaderboard.mjs` builds from the `score --json` files that `docs/scores/rows.json` lists. Round 3 gives hippo its row, from hippo 3.3.1 as frozen for round 3 (tag `z0-r3-freeze`, commit `cb992a079`; a test build, not the `v3.3.1` release tag): learns +0.009 [-0.052, 0.070], vs built-in -0.149 [-0.243, -0.055].
+
+## Round 3 in numbers
+
+Round 3 is the run behind hippo's row. It ran Claude Code 2.1.288 with `claude-opus-5-5`, from 5 to 8 November 2026.
+
+| | |
+|---|---|
+| Repositories | 29 open source repositories (Java, Kotlin, C#, Python, TypeScript, Go and others) |
+| Code | 3,283,727 non-blank lines in code files at the snapshot commits; 5,003,132 lines in all 30,100 tracked text files |
+| Lessons | 58 lesson families (44 maintainer rules, 14 template lessons), 13 of them reversed later, 71 lessons in all |
+| No-lesson tasks | 174 (6 per repository) |
+| Task records | 4,862: A0 748, A1 1,122, A2 1,122, A4 748, A5 1,122 |
+| Claude Code sessions | 4,596 |
+| Prompts | 5,880 (task prompts, teach messages and corrections) |
+| Usage | $1,585.90 at API list price |
+
+Share of lessons failed on the first try, at each lesson's first apply (violation coding, 95% interval):
+
+| arm | failed |
+|---|---|
+| A0 no memory | 0.839 [0.764, 0.915] |
+| A1 built-in memory | 0.265 [0.175, 0.354] |
+| A2 built-in + hippo | 0.116 [0.068, 0.164] |
+| A5 built-in + hippo, saving off (the decoy) | 0.107 [0.060, 0.154] |
+| A4 perfect memory | 0.068 [0.006, 0.131] |
+
+All five gates pass. Hippo against built-in memory is -0.149 [-0.243, -0.055] (Holm-adjusted p 0.006), at a cost ratio of 1.006 [0.964, 1.049]. In round 3 the decoy was hippo fully installed, with its saving turned off: the same build, hooks and `CLAUDE.md` block, but its save commands did nothing, so its store stayed empty. Full hippo against hippo with saving off is +0.009 [-0.052, 0.070]. Both arms with hippo installed cut repeat mistakes by the same amount, so the gain comes from installing hippo, and round 3 cannot credit hippo's stored lessons. Our audit points to hippo's `CLAUDE.md` block: it sent agents to Claude Code's own memory files, even when hippo had saved nothing.
+
+The code lines are `git grep -I -c` counts over code file types at each repository's snapshot commit. Sessions are the distinct Claude Code session ids in the task records. Prompts are the typed user turns in those sessions' transcripts.
 
 ## Run it
 
@@ -35,10 +64,10 @@ A run signs in with either `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`. Set
 
 | split | repos | setups | sessions | cost | result |
 |---|---|---|---|---|---|
-| lite | 8 | built-in, memory and decoy (A1, A2, A5), seed 1 | about 287 | about $97 | no score; a smoke run |
-| full | 29 | all five | about 4,408 | about $1,504 at API list price | a ranked row |
+| lite | 8 | built-in, memory and decoy (A1, A2, A5), seed 1 | about 310 | about $105 | no score; a smoke run |
+| full | 29 | all five | about 4,600 | about $1,590 at API list price | a ranked row |
 
-The session and dollar figures come from round 3 wave 1.
+The session and dollar figures are round 3's own: 311 sessions and $104.61 for the lite cells, 4,596 sessions and $1,585.90 for all 4,862 task records.
 
 The command is `ai-psychosisbench` (the `bin` in `package.json`). From a clone, run it as `node lib/cli.mjs`:
 

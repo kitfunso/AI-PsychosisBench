@@ -14,10 +14,10 @@ describe('the leaderboard', () => {
     expect(read('leaderboard.json')).toEqual(JSON.parse(leaderboardJson(DOCS)));
   });
 
-  it('ranks round 3 as hippo 1.71.0 with the numbers its score file holds', () => {
+  it('ranks round 3 as hippo 3.3.1 (round 3 build) with the numbers its score file holds', () => {
     const score = read('scores/hippo-r3.json');
     const [hippo, open] = read('leaderboard.json').rows;
-    expect(hippo).toMatchObject({ label: 'hippo, round 3 run', memory: 'hippo', version: '1.71.0', status: 'round 3 run' });
+    expect(hippo).toMatchObject({ label: 'hippo, round 3 run', memory: 'hippo', version: '3.3.1 (round 3 build)', status: 'round 3 run' });
     expect(hippo.vsBuiltIn).toMatchObject({ estimate: score.H1.estimate, low: score.H1.low, high: score.H1.high, text: '-0.149 [-0.243, -0.055]' });
     expect(hippo.learns).toMatchObject({ estimate: score.learn.estimate, low: score.learn.low, high: score.learn.high, text: '+0.009 [-0.052, 0.070]' });
     expect(score).toMatchObject({ records: 4862, planned: 4862, gates: { G1: true, G2: true, G3: true, G4: true, G5: true }, iterations: 10000, seed: 1 });

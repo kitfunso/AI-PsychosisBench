@@ -1,6 +1,6 @@
 {
   "name": "hippo",
-  "version": "1.71.0",
+  "version": "3.3.1 (round 3 build)",
   "install": [
     "node \"${AIPB_ADAPTER_DIR}/hippo/install.mjs\""
   ],
