@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { BENCH, SLUG } from '../lib/name.mjs';
+import { writeManifest } from '../lib/dataset.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -173,23 +174,7 @@ fs.writeFileSync(readmePath, readme);
 fs.writeFileSync(path.join(OUT, 'README.md'), readme);
 
 // 9. manifest, last
-function walk(d, base = '') {
-  return fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => {
-    const rel = base ? `${base}/${e.name}` : e.name;
-    return e.isDirectory() ? walk(path.join(d, e.name), rel) : [rel];
-  });
-}
-const files = walk(OUT).filter((f) => f !== 'manifest.json').sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-const entries = files.map((f) => {
-  const h = crypto.createHash('sha256');
-  const fd = fs.openSync(path.join(OUT, f), 'r');
-  const buf = Buffer.allocUnsafe(1 << 20);
-  let n; let size = 0;
-  while ((n = fs.readSync(fd, buf, 0, buf.length, null)) > 0) { h.update(buf.subarray(0, n)); size += n; }
-  fs.closeSync(fd);
-  return { path: f, sha256: h.digest('hex'), bytes: size };
-});
-writeJson(path.join(OUT, 'manifest.json'), { files: entries });
+const entries = writeManifest(OUT);
 const totalBytes = entries.reduce((n, e) => n + e.bytes, 0);
 console.log(`TOTAL repos=${keys.length} tasks=${totalTasks} checks=${totalChecks} bundles=${totalBundle.toFixed(1)}MB files=${entries.length} size=${(totalBytes / 1048576).toFixed(1)}MB`);
 console.log(`lite: ${lite.join(' ')}`);
