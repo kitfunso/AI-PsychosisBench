@@ -158,7 +158,7 @@ describe('the CLI', () => {
     expect(text).toContain(`| manifest sha256 | ${FAKE_MEMORY.sha256} |`);
   });
 
-  it('verify passes a lite run of the toy dataset, then fails it for a key-shaped value and for a missing record', async () => {
+  it('regrade redoes a resumed row with another checker sha; verify passes a lite run, then fails it for a key-shaped value and a missing record', async () => {
     const home = tmp('cli-home-');
     Object.assign(process.env, { HOME: home, USERPROFILE: home, APPDATA: join(home, 'AppData', 'Roaming') });
     process.chdir(tmp('cli-cwd-'));
@@ -168,7 +168,20 @@ describe('the CLI', () => {
     const out = join(tmp('cli-out-'), 'run');
     await runAll({ spec: d.spec, arms: [...LITE.arms], seeds: LITE.seeds, outDir: out, model: null, claudeBin: `"${process.execPath}" "${FAKE}"`, adapter: FAKE_MEMORY, warmup: false, log: () => {}, passEnv: fixtureEnv() });
     const scratch = tmp('cli-scratch-');
-    expect(runCli(['regrade', '--run', out, '--dataset', ds, '--scratch', scratch])).toMatchObject({ code: 0, stdout: expect.stringContaining('changed  0 verdicts') });
+    const regrade = () => runCli(['regrade', '--run', out, '--dataset', ds, '--scratch', scratch]);
+    expect(regrade()).toMatchObject({ code: 0, stdout: expect.stringContaining('changed  0 verdicts') });
+    // A resumed row whose checker sha is not the pack's, as after a repack, is graded again.
+    const rowsFile = join(scratch, 'regrade.jsonl');
+    const readRowsFile = () => readFileSync(rowsFile, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    const rows = readRowsFile();
+    const graded = rows.find((r) => r.checks.length > 0);
+    appendFileSync(rowsFile, `${JSON.stringify({ ...graded, checks: graded.checks.map((c: object) => ({ ...c, checkerSha: '0'.repeat(64) })) })}\n`);
+    const again = regrade();
+    expect(again.stdout).toContain('changed  0 verdicts');
+    expect(again.stdout).not.toContain('checkers ');
+    const after = readRowsFile();
+    expect(after).toHaveLength(rows.length + 2);
+    expect(after.at(-1)).toMatchObject({ key: graded.key, checks: graded.checks });
     // Each verify resumes the regrade's rows in the same scratch, so only the first regrade runs the checkers.
     const verify = () => runCli(['verify', out, '--dataset', ds, '--scratch', scratch]);
     const ok = verify();
