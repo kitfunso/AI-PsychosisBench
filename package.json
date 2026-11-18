@@ -6,7 +6,7 @@
   "private": true,
   "license": "MIT",
   "bin": {
-    "ai-psychosisbench": "lib/ab-run.mjs"
+    "ai-psychosisbench": "lib/cli.mjs"
   },
   "scripts": {
     "test": "vitest run --pool=forks --maxWorkers=2"

@@ -1,0 +1,11 @@
+{
+  "asOf": "2026-10-11",
+  "claude-code": {
+    "model": "claude-opus-5-5",
+    "inputPerMTok": 4,
+    "cacheWritePerMTok": 8,
+    "cacheReadPerMTok": 0.2,
+    "outputPerMTok": 20,
+    "source": "https://platform.claude.com/docs/en/about-claude/pricing, Claude Opus 5.5 row; 1h cache write rate, since Claude Code 2.1.288 writes ephemeral_1h entries (cal-cj transcripts)"
+  }
+}

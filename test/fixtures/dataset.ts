@@ -23,8 +23,8 @@ export function bundleRepo(dest: string, tmp: (prefix: string) => string): strin
 
 const noLesson = (id: string, base: string) => ({ id, kind: 'no-lesson', baseRef: base, fixRef: base, prompt: `Task ${id}.`, test: 'node test.js', testFiles: [] });
 
-/** The dataset folder; `lite` names the lite split's keys (k2 by default). */
-export function makeDataset(tmp: (prefix: string) => string, { lite = ['k2'] }: { lite?: string[] } = {}): string {
+/** The dataset folder; `lite` names the lite split's keys (k2 by default), and `tasks` keeps only those toy tasks in k1, with their families. */
+export function makeDataset(tmp: (prefix: string) => string, { lite = ['k2'], tasks = null }: { lite?: string[]; tasks?: string[] | null } = {}): string {
   const dir = tmp('ds-');
   const k1 = join(dir, 'repos', 'k1');
   const k2 = join(dir, 'repos', 'k2');
@@ -33,6 +33,11 @@ export function makeDataset(tmp: (prefix: string) => string, { lite = ['k2'] }: 
   bundleRepo(k1, tmp);
   const toy = JSON.parse(readFileSync(join(TOY, 'toy-tasks.json'), 'utf8'));
   toy.sequences[0].repo = 'repo.bundle';
+  if (tasks) {
+    toy.sequences[0].tasks = toy.sequences[0].tasks.filter((t: { id: string }) => tasks.includes(t.id));
+    const used = new Set(toy.sequences[0].tasks.map((t: { familyId?: string }) => t.familyId));
+    toy.families = toy.families.filter((f: { id: string }) => used.has(f.id));
+  }
   writeFileSync(join(k1, 'tasks.json'), JSON.stringify(toy));
   copyFileSync(join(TOY, 'lesson.mjs'), join(k1, 'lesson.mjs'));
   const base = bundleRepo(k2, tmp);
