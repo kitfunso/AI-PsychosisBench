@@ -26,11 +26,28 @@ const runDirs = fs.readdirSync(RUNS, { withFileTypes: true })
 const map = runDirs.map((d) => ({ runDir: d, key: d.replace(/-w1b?$/, '') }));
 const keys = map.map((m) => m.key).sort();
 if (new Set(keys).size !== keys.length) fail('duplicate keys from run dirs');
-const missing = map.filter((m) => !fs.existsSync(`${MERGED}/${m.key}/tasks.json`));
-for (const m of map) console.log(`${m.runDir} -> ${MERGED}/${m.key}${missing.includes(m) ? '  MISSING' : ''}`);
-if (missing.length) fail(`no merged-r3 folder for: ${missing.map((m) => m.key).join(', ')}`);
+// Round 3 ran merged-r3/<key>-r/tasks-run.json (s3x-run.ps1); merged-r3/<key>/ is the larger pool it was cut from.
+const srcOf = (key) => `${MERGED}/${key}-r`;
+const TASKS_FILE = 'tasks-run.json';
+const missing = map.filter((m) => !fs.existsSync(`${srcOf(m.key)}/${TASKS_FILE}`));
+for (const m of map) console.log(`${m.runDir} -> ${srcOf(m.key)}${missing.includes(m) ? '  MISSING' : ''}`);
+if (missing.length) fail(`no ${TASKS_FILE} in merged-r3 for: ${missing.map((m) => m.key).join(', ')}`);
 if (keys.length !== 29) fail(`expected 29 keys, found ${keys.length}`);
 console.log(`keys: ${keys.length}`);
+
+// 1b. the packed tasks are the tasks round 3 ran: each repo's task ids must equal those its wave 1 records name
+const idsRun = (runDir) => new Set(fs.readFileSync(`${RUNS}/${runDir}/run/runs.jsonl`, 'utf8').split(/\r?\n/)
+  .filter((l) => l.trim()).map((l) => JSON.parse(l).taskId));
+const drift = map.flatMap(({ runDir, key }) => {
+  const ran = idsRun(runDir);
+  const spec = JSON.parse(fs.readFileSync(`${srcOf(key)}/${TASKS_FILE}`, 'utf8'));
+  const packed = new Set(spec.sequences.flatMap((s) => s.tasks.map((t) => t.id)));
+  const notRun = [...packed].filter((id) => !ran.has(id));
+  const notPacked = [...ran].filter((id) => !packed.has(id));
+  return notRun.length || notPacked.length ? [`${key}: not in the records ${notRun.join(' ') || '-'}; not packed ${notPacked.join(' ') || '-'}`] : [];
+});
+if (drift.length) fail(`tasks differ from round 3's records, so the pack would not be the run:\n${drift.join('\n')}`);
+console.log('tasks: every repo packs exactly the task ids its round 3 records name');
 
 // 2. pins
 const pinsIn = JSON.parse(fs.readFileSync(`${SCORED}/pins-r3.json`, 'utf8'));
@@ -120,10 +137,10 @@ let totalTasks = 0;
 let totalChecks = 0;
 
 for (const key of keys) {
-  const src = `${MERGED}/${key}`;
+  const src = srcOf(key);
   const dst = path.join(OUT, 'repos', key);
   fs.mkdirSync(dst, { recursive: true });
-  const tasksRaw = fs.readFileSync(`${src}/tasks.json`);
+  const tasksRaw = fs.readFileSync(`${src}/${TASKS_FILE}`);
   const tasks = JSON.parse(tasksRaw);
   // Vendors get no C:/z0-runs, so each sequence points at the bundle beside its tasks file.
   const portable = tasksRaw.toString('utf8').split(`${src}/repo`).join('repo.bundle');
