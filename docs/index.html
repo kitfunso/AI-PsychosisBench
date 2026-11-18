@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI-PsychosisBench leaderboard</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1b1f24; --muted: #59636e; --line: #d1d9e0; --good: #1a7f37; --bad: #cf222e; --bg: #fff; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e6edf3; --muted: #9198a1; --line: #3d444d; --good: #3fb950; --bad: #f85149; --bg: #0d1117; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 960px; margin: 0 auto; padding: 32px 20px; }
+  h1 { font-size: 28px; margin: 0 0 8px; }
+  p { margin: 0 0 12px; }
+  .muted { color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; margin: 24px 0; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .lower { color: var(--good); }
+  .higher { color: var(--bad); }
+  .open td { color: var(--muted); }
+  code { font-size: 14px; }
+  a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <h1>AI-PsychosisBench</h1>
+  <p>AI-PsychosisBench measures repeat mistakes by coding agents with memory. It is not a mental-health benchmark and is not related to psychosis-bench (arXiv 2509.10970).</p>
+  <p class="muted">Each number is a difference in the share of lessons a Claude Code agent fails on the first try, with its 95% interval. Below zero is better.
+    <b>Learns</b> is the memory minus the same memory with a new namespace for each task, so it shows whether the memory carries lessons.
+    <b>Vs built-in</b> is the memory minus Claude Code's built-in memory.</p>
+  <table>
+    <thead><tr><th>Memory</th><th>Version</th><th>Learns</th><th>Vs built-in</th><th>Status</th></tr></thead>
+    <tbody id="rows"><tr><td colspan="5" class="muted">Loading leaderboard.json</td></tr></tbody>
+  </table>
+  <p class="muted">The numbers come from <code>leaderboard.json</code>, which <code>node lib/leaderboard.mjs</code> builds from the <code>score --json</code> files in <code>docs/scores/</code>.
+    To add your memory: register, run the full split, then submit. See the <a href="https://github.com/kitfunso/AI-PsychosisBench#add-your-memory-to-the-leaderboard">README</a>.</p>
+</main>
+<script>
+  const cell = (text, cls) => {
+    const td = document.createElement('td');
+    td.textContent = text;
+    if (cls) td.className = cls;
+    return td;
+  };
+  // An interval wholly below zero is a lower failure share, so it shows as better.
+  const tone = (e) => (e.high < 0 ? 'num lower' : e.low > 0 ? 'num higher' : 'num');
+  const est = (e) => (e ? cell(e.text, tone(e)) : cell('', 'num'));
+  fetch('leaderboard.json')
+    .then((r) => { if (!r.ok) throw new Error(`leaderboard.json: HTTP ${r.status}`); return r.json(); })
+    .then((board) => {
+      const body = document.getElementById('rows');
+      body.replaceChildren(...board.rows.map((row) => {
+        const tr = document.createElement('tr');
+        if (!row.learns) tr.className = 'open';
+        tr.append(cell(row.memory), cell(row.version ?? ''), est(row.learns), est(row.vsBuiltIn), cell(row.status));
+        return tr;
+      }));
+    })
+    .catch((err) => {
+      const tr = document.createElement('tr');
+      tr.append(cell(`Could not load the leaderboard: ${err.message}`));
+      tr.firstChild.colSpan = 5;
+      document.getElementById('rows').replaceChildren(tr);
+    });
+</script>
+</body>
+</html>

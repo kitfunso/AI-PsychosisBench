@@ -1,0 +1,35 @@
+{
+  "schema": "ai-psychosisbench-leaderboard/1",
+  "bench": "AI-PsychosisBench",
+  "rows": [
+    {
+      "label": "hippo, round 3 run",
+      "memory": "hippo",
+      "version": "1.71.0",
+      "learns": {
+        "estimate": 0.008928571428567213,
+        "low": -0.0517900686942267,
+        "high": 0.06964721155136112,
+        "units": 148,
+        "text": "+0.009 [-0.052, 0.070]"
+      },
+      "vsBuiltIn": {
+        "estimate": -0.14880952380952803,
+        "low": -0.24253326735832248,
+        "high": -0.055085780260733574,
+        "units": 148,
+        "text": "-0.149 [-0.243, -0.055]"
+      },
+      "status": "round 3 run",
+      "score": "hippo-r3.json"
+    },
+    {
+      "label": "your memory",
+      "memory": "your memory",
+      "version": null,
+      "learns": null,
+      "vsBuiltIn": null,
+      "status": "register, run, submit"
+    }
+  ]
+}
