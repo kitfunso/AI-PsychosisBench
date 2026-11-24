@@ -1,4 +1,3 @@
-// A pre-session snapshot copy that fails (EBUSY on Windows) never abandons the run; the retry says the restore failed.
 import { describe, it, expect, afterEach } from 'vitest';
 import { cpSync, existsSync } from 'node:fs';
 import { join } from 'node:path';

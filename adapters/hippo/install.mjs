@@ -1,12 +1,9 @@
-// hippo adapter install: the run's own `hippo` launcher in $AIPB_BIN, on the round 3 build only, as round 3's shim was.
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 
-// dist/ of hippo at tag z0-r3-freeze (commit cb992a07), as C:/z0-runs/scored/pins-r3.json pins it.
 const R3_DIST_HASH = '97ba0e9b48a27a66527c52c59462fd455395512101c98e2b19768afb32d6b1dd';
 
-/** The round 3 runner's tree hash: each file's path, size and bytes, in path order. */
 function treeHash(dir) {
   const h = createHash('sha256');
   const files = fs.readdirSync(dir, { recursive: true, withFileTypes: true }).filter((e) => e.isFile())
@@ -31,7 +28,6 @@ if (hash !== R3_DIST_HASH) {
   process.exit(1);
 }
 fs.mkdirSync(bin, { recursive: true });
-// Round 3's HOME for every hippo call was the out dir, which keeps hippo off the operator's ~/.claude.
 fs.writeFileSync(path.join(bin, 'hippo'), `#!/bin/sh\nexport HOME="${out}" USERPROFILE="${out}"\nexec "${process.execPath}" "${path.resolve(cli)}" "$@"\n`, { mode: 0o755 });
 // @setlocal: a caller that runs hippo inside a longer cmd line keeps its own HOME afterwards.
 fs.writeFileSync(path.join(bin, 'hippo.cmd'), `@setlocal\r\n@set "HOME=${out}"\r\n@set "USERPROFILE=${out}"\r\n@"${process.execPath}" "${path.resolve(cli)}" %*\r\n`);

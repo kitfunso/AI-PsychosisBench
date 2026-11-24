@@ -41,7 +41,6 @@ describe('four-bucket cost accounting', () => {
   });
 
   it('shows why raw tokens overstate savings when input is mostly cache reads', () => {
-    // Cutting 10% of the cached history saves far less than 10% of the input bill.
     const before = { inputTokens: 5_000, cacheWriteTokens: 5_000, cacheReadTokens: 900_000, outputTokens: 0 };
     const after = { ...before, cacheReadTokens: 810_000 };
     const rawCut = 1 - (after.inputTokens + after.cacheWriteTokens + after.cacheReadTokens)
@@ -75,7 +74,6 @@ describe('bootstrap', () => {
   });
 
   it('gives a wider interval when clustering is respected', () => {
-    // Five repos, each with a shared offset: tasks inside a repo move together.
     const byCluster = new Map<string, number[]>();
     const offsets = [-1, -0.5, 0, 0.5, 1.2];
     offsets.forEach((o, i) => byCluster.set(`repo${i}`, Array.from({ length: 30 }, (_, j) => o + (j % 3) * 0.01)));
@@ -222,20 +220,17 @@ describe('two-level bootstrap', () => {
   });
 
   it('draws repositories first, then every family of each drawn repository', () => {
-    // One family of one unit in A, three in B: two draws give (2,0) from AA, (1,3) from AB or BA, (0,6) from BB.
     const repos: Repository<string>[] = [[['A']], [['B'], ['B'], ['B']]];
     const seen = new Set<string>();
     twoLevelBootstrap(repos, (units) => {
       seen.add(`${units.filter((u) => u === 'A').length},${units.filter((u) => u === 'B').length}`);
       return 0;
     }, { iterations: 500 });
-    // The point-estimate call sees every unit: (1,3), already an allowed pair.
     expect([...seen].sort()).toEqual(['0,6', '1,3', '2,0']);
   });
 
   describe('p-value from a scripted statistic', () => {
     const repos: Repository<number>[] = [[[1]], [[2]]];
-    // The estimate call comes after the resamples, so it never shifts the sequence the p-value sees.
     const run = (seq: readonly number[], iterations: number, nullValue = 0) => {
       let call = 0;
       return twoLevelBootstrap(repos, () => seq[call++ % seq.length]!, { iterations, nullValue });
@@ -246,13 +241,11 @@ describe('two-level bootstrap', () => {
     });
 
     it('counts a sample on the null on both sides', () => {
-      // below = 2 of 8 with the tie, only 1 of 8 without it.
       expect(run([-1, 0, 1, 1, 1, 1, 1, 1], 400).p).toBeCloseTo(0.5, 12);
       expect(run([1, 0, -1, -1, -1, -1, -1, -1], 400).p).toBeCloseTo(0.5, 12);
     });
 
     it('divides by the kept samples only', () => {
-      // Per cycle of 8: 6 kept (one below, five above), so p = 2 x 1/6, not 2 x 1/8.
       const r = run([-1, Number.NaN, 1, 1, 1, Number.NaN, 1, 1], 400);
       expect(r.dropped).toBe(100);
       expect(r.p).toBeCloseTo(1 / 3, 12);
@@ -339,7 +332,6 @@ describe('verdict', () => {
     const atOne = twoLevelBootstrap(saving, ratio, { iterations: 300, nullValue: 1 });
     expect(atOne.nullValue).toBe(1);
     expect(verdict(atOne, 0.01, ratioSpec)).toEqual({ verdict: 'win', reachesMinimum: true });
-    // The same data judged around 0 sits on the harmful side of a lower-is-better ratio.
     const atZero = twoLevelBootstrap(saving, ratio, { iterations: 300 });
     expect(atZero.nullValue).toBe(0);
     expect(verdict(atZero, 0.01, ratioSpec)).toEqual({ verdict: 'loss', reachesMinimum: false });

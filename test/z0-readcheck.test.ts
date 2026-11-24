@@ -1,4 +1,3 @@
-// Z0 G1 read check and delivery voids (prereg 113, 159-162) with the fake Claude Code: a session that read past its own memory is void.
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { symlinkSync, writeFileSync, rmSync, readdirSync, mkdirSync, realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -47,7 +46,6 @@ describe('reads outside the cell (one A1 run, one read per task)', () => {
 
   beforeAll(async () => {
     const { out, home } = isolate('reads');
-    // The read check skips paths that name nothing, so the files these probes read exist.
     for (const f of ['runs/seqF/A2/seed1/claude-config/x', 'runs/seqF/A2/seed1/work/lib.js']) writeFileIn(out, f);
     writeFileIn(home, '.claude/projects/p/s.jsonl');
     const r = makeRepo();
@@ -131,26 +129,21 @@ describe('resolveToken', () => {
 
 describe('paths realpath cannot take', () => {
   afterEach(cleanup);
-  // Under the root, which is never a link (macOS links /tmp), so the expected fold is the input's.
   const base = process.platform === 'win32' ? 'C:/z0-no-such-dir' : '/z0-no-such-dir';
   const fold = (p: string) => (process.platform === 'win32' ? p.toLowerCase() : p);
 
   it('fold to their deepest resolvable prefix instead of throwing', () => {
-    // ENAMETOOLONG: the whole path on Windows, any segment over 255 characters on Linux.
     expect(foldPath(`${base}/${'c'.repeat(40000)}`)).toBe(fold(`${base}/${'c'.repeat(40000)}`));
     expect(foldPath(`${base}/${'d'.repeat(300)}/x`)).toBe(fold(`${base}/${'d'.repeat(300)}/x`));
-    // ERR_INVALID_ARG_VALUE, a TypeError rather than a system error.
     expect(foldPath(`${base}/a\0b`)).toBe(fold(`${base}/a\0b`));
   });
 
   it.skipIf(process.platform !== 'win32')('fold a file Windows keeps locked (EBUSY)', (t) => {
-    // Listed, though stat on it fails, so existsSync says false.
     if (!readdirSync('C:/').includes('pagefile.sys')) t.skip();
     expect(foldPath('C:/pagefile.sys')).toBe('c:/pagefile.sys');
   });
 
   it.skipIf(process.platform !== 'win32')('a \\\\server\\share path folds without asking the network', () => {
-    // The network's own failure, as an agent's `\\ Remove ...` shell token once raised; a local or device path still reaches realpath.
     __setRealpath((p) => {
       if (/^\\\\[^\\?.]/.test(String(p))) throw Object.assign(new Error('connection reset by peer'), { code: 'ECONNRESET' });
       return realpathSync.native(p);
@@ -229,7 +222,6 @@ describe('an ancestor file seen only at an apply\'s resume is kept, never invali
 
   it('one a hook writes before a failing apply\'s resume skips the resume and leaves the apply valid', async () => {
     const { out, log } = isolate('resume-ancestor');
-    // A passing apply takes no resume, so a file written at this point could never invalidate it.
     __setSettleHook((_run: SettledRun, cell: string, when: string) => {
       if (cell === 'a1' && when === 'pre-resume') writeFileSync(above(out, 'A2'), 'written by a late hook\n');
       if (cell === 'a1' && when === 'end') rmSync(above(out, 'A2'), { force: true });
@@ -248,7 +240,6 @@ describe('an ancestor file seen only at an apply\'s resume is kept, never invali
     await run(oneLesson(makeRepo(), { a1: 'LESSON_BAD CUT_ON_RESUME ANCESTOR_ON_CUT' }), ['A1'], out, { limitWaitMs: 0 });
     const recs = readRecords(out);
     expect(find(recs, 'A1', 'a1')).toMatchObject({ invalid: null, void: null, limitRetries: 1, correctionTurns: 0, resumeAncestorHits: ['runs/seqF/A1/seed1/CLAUDE.md'] });
-    // The file stays, so the next session would load it: that cell's own session-1 check voids it.
     expect(find(recs, 'A1', 'a2').invalid).toBe('ancestor-instructions');
     expect(validateCorpus(recs, readPlan(out))).toEqual([]);
   }, 300_000);
@@ -314,7 +305,6 @@ describe('delivery voids and the worktree read', () => {
     const wtParent = tmp('z0-surf-worktree-parent-');
     const [shortOut, shortWt] = [out, wtParent].map(shortName);
     if (shortOut === out || shortWt === wtParent) t.skip();
-    // The run and the worktree live under short names, while git prints and the agent reads the long forms.
     process.env.FAKE_WT_DIR = `${shortWt}/wt`;
     await run(spec(r, [], [
       task(r, 't1', 'WORKTREE'), task(r, 't2', `READ:${out}/runs/seqF/A2/seed1/claude-config/x`), task(r, 't3', `READ:${shortWt}/wt/lib.js`),
@@ -346,7 +336,6 @@ describe('delivery voids and the worktree read', () => {
   }, 300_000);
 });
 
-/** The 8.3 short form of a dir, or the dir itself when the volume makes no short names. */
 function shortName(dir: string): string {
   const r = spawnSync('cmd.exe', ['/d', '/s', '/c', `"for %I in ("${dir}") do @echo %~sI"`], { windowsVerbatimArguments: true, encoding: 'utf8' });
   if (r.status !== 0) throw new Error(`cmd.exe gave no short name for ${dir}: ${r.stderr}`);

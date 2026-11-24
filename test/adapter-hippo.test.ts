@@ -1,16 +1,13 @@
-// adapters/hippo.json gives A2 the hook settings round 3's A2 sessions ran with, and A5 the same ones.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadAdapter, fillVars } from '../lib/adapter.mjs';
 import { armSettings } from '../lib/arms.mjs';
 
-// Copied read-only from C:/z0-runs/scored/r3run/db3-w1/run/settings/db3-A2-seed1.json.
 const R3 = JSON.parse(readFileSync(resolve(__dirname, 'fixtures', 'r3-db3-A2-seed1.json'), 'utf8'));
 const R3_OUT = 'C:\\z0-runs\\scored\\r3run\\db3-w1\\run';
 const HIPPO = loadAdapter(resolve(__dirname, '..', 'adapters', 'hippo.json'));
 
-/** Every out-dir path in a settings object, swapped for one marker, so two runs' settings compare. */
 const normalise = (v: unknown, outDir: string): unknown => JSON.parse(JSON.stringify(v).split(JSON.stringify(outDir).slice(1, -1)).join('<OUT>'));
 
 describe('the hippo adapter', () => {

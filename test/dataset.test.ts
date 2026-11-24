@@ -1,4 +1,3 @@
-// The packed dataset: one spec over a split, the manifest check, and a run that clones each repo from its bundle.
 import { describe, it, expect, afterEach } from 'vitest';
 import { mkdtempSync, writeFileSync, readFileSync, rmSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -38,7 +37,6 @@ describe('the packed dataset', () => {
     expect(d.keys).toEqual(['k1', 'k2']);
     expect(d.spec.sequences.map((s: { id: string }) => s.id)).toEqual(['seqA', 'seqB']);
     expect(d.spec.sequences.map((s: { repoPath: string }) => s.repoPath)).toEqual([join(dir, 'repos', 'k1', 'repo.bundle'), join(dir, 'repos', 'k2', 'repo.bundle')]);
-    // Records and plan cells name the bundle by its place in the dataset, so a plan hashes the same on any machine.
     expect(d.spec.sequences.map((s: { repo: string }) => s.repo)).toEqual(['toy-r3-v1/repos/k1/repo.bundle', 'toy-r3-v1/repos/k2/repo.bundle']);
     expect(d.spec.families[0].lessons[0].checkPath).toBe(join(dir, 'repos', 'k1', 'lesson.mjs'));
     expect(d.pins.claudeVersion).toBe('2.1.288');
@@ -94,7 +92,6 @@ describe('the packed dataset', () => {
     expect(ok.status, ok.stderr).toBe(0);
     expect(ok.stdout).toContain('dataset  toy-r3-v1 · lite split, 1 of 2 repos · sha256 ok');
     expect(ok.stdout).toContain('seqB/b2');
-    // Lite runs built-in, memory and sham on seed 1 unless --arms or --seeds says otherwise.
     const cells: Array<{ arm: string; seed: number }> = JSON.parse(readFileSync(join(scratch, 'out', 'plan.json'), 'utf8'));
     expect([...new Set(cells.map((c) => c.arm))].sort()).toEqual(['A1', 'A2', 'A5']);
     expect(cells.length).toBe(6);

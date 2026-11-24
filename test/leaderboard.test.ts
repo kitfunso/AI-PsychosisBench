@@ -1,4 +1,3 @@
-// The leaderboard is built from committed score files, and round 3's score file is what `score` gives on round 3's run.
 import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -33,7 +32,6 @@ describe('the leaderboard', () => {
     expect(() => buildLeaderboard([row], () => '{"schema":"other"}')).toThrow('x.json: schema other');
   });
 
-  // Round 3's runs live on the machine that ran them; elsewhere this check is skipped.
   it.skipIf(!existsSync(join(R3, 'blind.json')))('matches `score` run again on round 3', () => {
     const fresh = scoreRun(R3, { memory: join(__dirname, '..', 'adapters', 'hippo.json') });
     const { inputs, ...rest } = read('scores/hippo-r3.json');

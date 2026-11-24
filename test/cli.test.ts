@@ -1,4 +1,3 @@
-// The CLI commands with no model call: flags, cost, score, register, regrade and verify, the key scan and doctor.
 import { describe, it, expect, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, appendFileSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -39,10 +38,8 @@ const tmp = (prefix: string): string => {
   return d;
 };
 const sha = (file: string) => createHash('sha256').update(readFileSync(file)).digest('hex');
-// Built at run time, so no key-shaped literal sits in the source.
 const FAKE_KEY = ['sk', 'ant', 'api03', 'x'.repeat(40)].join('-');
 
-/** A runner-shaped out dir holding generated records, their plan and a passing grading file. */
 function generatedRun(arms?: string[]) {
   const dir = tmp('cli-run-');
   const g = generate(arms ? { arms } : {});
@@ -76,7 +73,6 @@ describe('the CLI', () => {
     const ds = makeDataset(tmp, { lite: ['k1'] });
     const out = runCli(['cost', '--run', a, '--run', b, '--dataset', ds]);
     expect(out.code).toBe(0);
-    // A1 runs 1.5 sessions per run-seed and A2 1: lite is 1 repo x 3 arms x 1 seed x 1.25.
     expect(out.stdout).toContain(`lite  approx. 4 sessions, approx. $939  (1 repos, ${LITE.arms.join(' ')}, seed 1`);
   });
 
@@ -162,7 +158,6 @@ describe('the CLI', () => {
     const home = tmp('cli-home-');
     Object.assign(process.env, { HOME: home, USERPROFILE: home, APPDATA: join(home, 'AppData', 'Roaming') });
     process.chdir(tmp('cli-cwd-'));
-    // One family's tasks and the two spacers its order needs keep the run to 15 sessions.
     const ds = makeDataset(tmp, { lite: ['k1'], tasks: ['t3', 'n1', 'n2', 'a4', 'a5'] });
     const d = loadDataset(ds, { split: 'lite' });
     const out = join(tmp('cli-out-'), 'run');
@@ -170,7 +165,6 @@ describe('the CLI', () => {
     const scratch = tmp('cli-scratch-');
     const regrade = () => runCli(['regrade', '--run', out, '--dataset', ds, '--scratch', scratch]);
     expect(regrade()).toMatchObject({ code: 0, stdout: expect.stringContaining('changed  0 verdicts') });
-    // A resumed row whose checker sha is not the pack's, as after a repack, is graded again.
     const rowsFile = join(scratch, 'regrade.jsonl');
     const readRowsFile = () => readFileSync(rowsFile, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
     const rows = readRowsFile();
@@ -182,7 +176,6 @@ describe('the CLI', () => {
     const after = readRowsFile();
     expect(after).toHaveLength(rows.length + 2);
     expect(after.at(-1)).toMatchObject({ key: graded.key, checks: graded.checks });
-    // Each verify resumes the regrade's rows in the same scratch, so only the first regrade runs the checkers.
     const verify = () => runCli(['verify', out, '--dataset', ds, '--scratch', scratch]);
     const ok = verify();
     expect(ok.code, ok.stdout + ok.stderr).toBe(0);

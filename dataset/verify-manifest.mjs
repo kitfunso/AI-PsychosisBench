@@ -1,4 +1,3 @@
-// Re-hashes a packed dataset against its manifest.json; exits 1 on any change.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';

@@ -1,5 +1,3 @@
-/** Student t tests for Z0: table quantiles, closed-form CDFs, the zero-spread rule, one repository (Amendment 1), and the
- * fixed-repository family tests and their pooled mean squares (Amendment 2) against a textbook two-way ANOVA. */
 import { describe, it, expect } from 'vitest';
 import {
   fixedRepositoryRatioT,
@@ -13,7 +11,6 @@ import {
   type RatioCell,
 } from '../lib/stats/repository-t.js';
 
-// t(0.975, df) from printed tables, to six decimals.
 const TABLE: readonly (readonly [number, number])[] = [[1, 12.706205], [2, 4.302653], [4, 2.776445], [9, 2.262157], [30, 2.042272]];
 
 describe('Student t distribution', () => {
@@ -71,14 +68,12 @@ describe('repositoryT', () => {
 
 type Grid = readonly (readonly number[])[];
 const avg = (xs: readonly number[]): number => xs.reduce((s, x) => s + x, 0) / xs.length;
-// A grid is indexed [family][seed]; seeds are numbered from 1.
 const unitsOf = (repo: string, grid: Grid): FamilyUnit[] =>
   grid.flatMap((row, i) => row.map((value, j) => ({ repo, family: `f${i}`, seed: j + 1, value })));
 const isNaNResult = (r: { estimate: number; low: number; high: number; p: number }): boolean =>
   [r.estimate, r.low, r.high, r.p].every(Number.isNaN);
 const rounded = (df: number): number => Math.round(df * 1000) / 1000;
 
-/** The textbook two-way ANOVA mean squares of a complete family-by-seed grid, by plain loops. */
 function anova(grid: Grid) {
   const [k, s] = [grid.length, grid[0]!.length];
   const grand = avg(grid.flat());
@@ -91,10 +86,8 @@ function anova(grid: Grid) {
   return { k, s, grand, F: ssF / (k - 1), Q: ssQ / (s - 1), E: ssE / ((k - 1) * (s - 1)) };
 }
 
-// Strong seed effects, tiny residual: Q is far above E.
 const GRID_A: Grid = [[1.1, 1.5, 0.5], [2.1, 2.9, 1.8], [0.5, 1.2, -0.1]];
 const GRID_B: Grid = [[3.2, 3.9, 2.9], [4.3, 4.6, 3.7], [2.6, 3.2, 2.0]];
-// Strong family effects, noisy cells: Q is below E.
 const GRID_C: Grid = [[1.0, 1.9, 0.6], [3.1, 2.2, 3.4], [5.2, 4.5, 5.6]];
 const GRID_D: Grid = [[2.0, 1.4, 2.3], [4.1, 4.8, 3.5], [6.3, 5.9, 6.8]];
 
@@ -106,7 +99,6 @@ describe('fixedRepositoryT', () => {
     const [g, k, s] = [2, 3, 3];
     const r = fixedRepositoryT([...unitsOf('A', GRID_A), ...unitsOf('B', GRID_B)]);
     const v = (F + Q - E) / (g * k * s);
-    // Satterthwaite over the F, Q and -E terms, with the pooled df G(k-1), G(s-1) and G(k-1)(s-1).
     const parts: readonly (readonly [number, number])[] = [[F / (g * k * s), g * (k - 1)], [Q / (g * k * s), g * (s - 1)], [-E / (g * k * s), g * (k - 1) * (s - 1)]];
     const df = v ** 2 / parts.reduce((sum, [x, d]) => sum + x ** 2 / d, 0);
     expect(r.estimate).toBeCloseTo(avg([a.grand, b.grand]), 12);
@@ -152,7 +144,6 @@ describe('fixedRepositoryT', () => {
     const present = unitsOf('A', GRID_A).filter((u) => !(u.family === 'f2' && u.seed === 3));
     const other = unitsOf('B', GRID_B);
     const base = fixedRepositoryT([...present, ...other]);
-    // The fit's mean is linear in the cells, so nudging each cell reads its weight: 2 x the change, as G is 2.
     const weights = present.map((_, i) => {
       const nudged = present.map((u, j) => (i === j ? { ...u, value: u.value + 1 } : u));
       return 2 * (fixedRepositoryT([...nudged, ...other]).estimate - base.estimate);
@@ -160,7 +151,6 @@ describe('fixedRepositoryT', () => {
     const noiseA = weights.reduce((sum, w) => sum + w * w, 0);
     expect(noiseA).toBeGreaterThan(1 / 8 + 1e-3);
     const p = pooledComponents([...present, ...other])!;
-    // Henderson III with one unit per cell: sBar = sum(n - s) / sum(k - 1) and kBar = sum(n - k) / sum(s - 1), (5 + 6) / 4 each.
     expect([p.sBar, p.kBar]).toEqual([expect.closeTo(11 / 4, 12), expect.closeTo(11 / 4, 12)]);
     expect(p.Q).toBeGreaterThan(p.E);
     const [cF, cQ] = [(2 / 3) / p.sBar, (2 / 3) / p.kBar];
@@ -172,7 +162,6 @@ describe('fixedRepositoryT', () => {
   });
 
   it('a thin repository weighs each family and seed by its share of the cells', () => {
-    // Repository T: f0 in seeds 1 and 2, f1 in seed 1 only (n 3, dfE 0), so family shares (2/3, 1/3) and seed shares (2/3, 1/3).
     const thin: FamilyUnit[] = [{ repo: 'T', family: 'f0', seed: 1, value: 1 }, { repo: 'T', family: 'f0', seed: 2, value: 2 }, { repo: 'T', family: 'f1', seed: 1, value: 4 }];
     const p = pooledComponents(unitsOf('A', GRID_A))!;
     expect(p.Q).toBeGreaterThan(p.E);
@@ -188,7 +177,6 @@ describe('fixedRepositoryT', () => {
     const keep = (miss: readonly (readonly [string, number])[]): FamilyUnit[] =>
       unitsOf('T', thin).filter((u) => !miss.some(([f, sd]) => u.family === f && u.seed === sd));
     const other = unitsOf('B', GRID_B);
-    // One cell out (n 5, dfE 1): the Yates-filled grand mean; two out (n 4, dfE 0): the plain mean of the cells.
     const one = keep([['f1', 3]]);
     const present = one.reduce((sum, u) => sum + u.value, 0);
     const fill = (2 * (2.2 + 2.1) + 3 * 0.9 - present) / 2;
@@ -203,18 +191,15 @@ describe('fixedRepositoryT', () => {
     const single = GRID_B.map((row) => [row[0]!]);
     const r = fixedRepositoryT([...unitsOf('A', GRID_A), ...unitsOf('B', single)]);
     expect(r.estimate).toBeCloseTo(avg([a.grand, avg(single.flat())]), 12);
-    // Repository A (k 3, s 3, n 9) and B (k 3, s 1, n 3) against sBar 3, kBar 3: cF 2/9, cQ 1/9 + 1/3, cE -1/9 - 1/9.
     const [cF, cQ, cE] = [2 / 9, 1 / 9 + 1 / 3, -2 / 9];
     const parts: readonly (readonly [number, number])[] = [[(cF * a.F) / 4, 2], [(cQ * a.Q) / 4, 2], [(cE * a.E) / 4, 4]];
     const v = parts.reduce((sum, [x]) => sum + x, 0);
     expect(r.se! ** 2).toBeCloseTo(v, 12);
     expect(r.df).toBeCloseTo(v ** 2 / parts.reduce((sum, [x, d]) => sum + x ** 2 / d, 0), 9);
-    // A leak that leaves a repository one seed deep must not void the test.
     expect(Number.isFinite(r.p)).toBe(true);
   });
 
   it('a table that splits into two family-seed blocks is unfitted: it adds its mean and takes the pooled spread', () => {
-    // 2 families x 2 seeds twice over, sharing no family and no seed: n 8, k 4, s 4, so n - k - s + 1 = 1 would pass as a fit.
     const block = (families: readonly string[], seeds: readonly number[]): FamilyUnit[] =>
       families.flatMap((family, i) => seeds.map((seed, j) => ({ repo: 'X', family, seed, value: 1 + 0.9 * i + 0.5 * j + ((i * j) % 2) * 0.3 })));
     const split = [...block(['f0', 'f1'], [1, 2]), ...block(['f2', 'f3'], [3, 4])];
@@ -274,7 +259,6 @@ describe('pooledComponents', () => {
   });
 
   it('an exactly additive table has no residual, and F and Q are the hand-computed mean squares', () => {
-    // y = a_i + b_j with a = (0, 1, 3) and b = (0, 2, 5): F = 3 x 14/3 / 2 = 7, Q = 3 x 38/3 / 2 = 19.
     const [rows, cols] = [[0, 1, 3], [0, 2, 5]];
     const grid: Grid = rows.map((x) => cols.map((y) => x + y));
     const p = pooledComponents(unitsOf('A', grid))!;

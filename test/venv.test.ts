@@ -1,4 +1,3 @@
-// A Python repo runs in a venv of its own, in the runner and in doctor, as round 3 ran each one (s3x-run.ps1).
 import { describe, it, expect, afterEach } from 'vitest';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';

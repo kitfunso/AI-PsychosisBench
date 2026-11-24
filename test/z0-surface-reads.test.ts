@@ -1,4 +1,3 @@
-// Z0 readers of what the runner recorded: screen verdicts over void sessions, leak scans through directory links, injected bullets with blank lines.
 import { describe, it, expect, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -56,7 +55,6 @@ describe('leak scan through a directory link', () => {
     expect(storedAt({ id: 'l2', keyPhrase: 'zq-absent' }, at)).toBe(false);
   });
 
-  /** claude-config/rules linked to a dir; `inner(target)` adds more under it and returns false when this box refuses the link. */
   const linkedRules = (kind: 'junction' | 'file', inner: (target: string) => void) => {
     const root = tmp('z0-leak-root-');
     const target = tmp('z0-leak-target-');
@@ -94,7 +92,6 @@ describe('leak scan through a directory link', () => {
   });
 });
 
-// One bullet as hippo's contextLine prints it with framing 'observe' (src/api/context-render.ts at tag z0-r3-freeze).
 const hippoBullet = (content: string, isGlobal: boolean): string => `- **[observed] Previously observed (2026-10-01): ${isGlobal ? '[global] ' : ''}${content}** (100%)`;
 
 describe('injected bullets', () => {

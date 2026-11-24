@@ -1,4 +1,3 @@
-// Z0 runner git helper: a file in .git, a lock file or the index held by antivirus is retried and counted; any other failure throws at once.
 import { describe, it, expect, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -10,7 +9,6 @@ const failed = (stderr: string): Error => Object.assign(new Error('Command faile
 const lockError = (): Error => failed('error: unable to write file C:\\w\\task one\\.git/objects/ed/5761b76fa3e3108be99db67d67ad64be345543: Permission denied\nfatal: adding files failed\n');
 const NO_WAIT = [0, 0, 0, 0];
 
-// Each shape seen on Windows while real-time scanning held a file git had just written.
 const SCAN_LOCKS: [string, string][] = [
   ['an index git cannot replace', 'fatal: unable to write new index file\n'],
   ['packed-refs on a clone', 'error replacing C:/w/repo-cache/seqA/.git/packed-refs: Permission denied\nfatal: remote did not send all necessary objects\n'],
@@ -95,7 +93,6 @@ describe('cloneFresh', () => {
     const dest = join(root, 'repo-cache', 'seqA');
     const before = objectLockRetries.count;
     let calls = 0;
-    // The first try leaves what a clone does when packed-refs cannot be replaced: a .git dir with no history.
     const once = (args: string[]): string => {
       calls++;
       if (calls > 1) return git(args);

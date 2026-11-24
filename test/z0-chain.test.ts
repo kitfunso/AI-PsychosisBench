@@ -1,11 +1,9 @@
-// Z0 failure chain (prereg 179-182) and injected-row sources (93) with the fake Claude Code.
 import { describe, it, expect, afterEach } from 'vitest';
 import { injectedRows } from '../lib/surfaces.mjs';
 import {
   cleanup, isolate, makeRepo, teach, apply, plain, lesson, family, spec, run, readRecords, find,
 } from './fixtures/z0-harness.js';
 
-/** Teach t1 with `t1`, two plain tasks, then applies a1 (passes its check) and a2; the arms run in one lockstep. */
 function chainSpec(r: ReturnType<typeof makeRepo>, t1: string) {
   return spec(r, [family('f1', [lesson('f1-l1', 'Write the lesson file')])], [
     teach(r, 't1', 'f1-l1', t1), plain(r, 'n1'), plain(r, 'n2'), apply(r, 'a1', 'f1-l1', 'LESSON_OK'), apply(r, 'a2', 'f1-l1', 'look around only'),
@@ -68,7 +66,6 @@ describe('failure chain on applies', () => {
   }, 300_000);
 });
 
-// One bullet as hippo's contextLine prints it with framing 'observe' (src/api/context-render.ts at tag z0-r3-freeze).
 const hippoBullet = (content: string, isGlobal: boolean): string => `- **[observed] Previously observed (2026-10-01): ${isGlobal ? '[global] ' : ''}${content}** (100%)`;
 
 describe('injected-row sources', () => {

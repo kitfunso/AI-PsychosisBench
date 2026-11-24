@@ -1,4 +1,3 @@
-// Pins: Claude Code's version token, the dataset pins every run checks by default, and the off-pin refusal.
 import { describe, it, expect, afterEach } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -45,7 +44,6 @@ describe('the --pins check', () => {
 describe('the pins a run checks by default', () => {
   const dirs: string[] = [];
   afterEach(() => { while (dirs.length) rmSync(dirs.pop()!, { recursive: true, force: true }); });
-  /** A dataset root with repos/r1/tasks.json, and pins.json at the root when `pins` is given. */
   function dataset(pins?: object) {
     const root = mkdtempSync(join(tmpdir(), 'aipb-pins-'));
     dirs.push(root);

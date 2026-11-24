@@ -1,5 +1,3 @@
-// Z0 runner end to end with a stand-in for Claude Code (test/fixtures/fake-claude.mjs), so it costs nothing.
-// Real git, hidden-test grading, ledger and CLI; the stand-in's token numbers are made up.
 import { describe, it, expect, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync, readdirSync, statSync, cpSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -38,7 +36,6 @@ const tmp = (prefix: string): string => {
   return d;
 };
 
-/** Temp operator HOME, USERPROFILE, APPDATA and cwd, so nothing reaches the real ones. */
 function isolate(): string {
   const home = tmp('ab-run-home-');
   process.env.HOME = home;
@@ -50,7 +47,6 @@ function isolate(): string {
 
 interface FixtureRepo { repo: string; base: string; fix: string }
 
-/** A repo whose fix flips add()'s operator and adds its test; `note` adds a comment line to the fix, a gold line for the leak check. */
 function makeRepo(note = ''): FixtureRepo {
   const repo = tmp('ab-run-repo-');
   const git = (...args: string[]): string => execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim();
@@ -72,7 +68,6 @@ function makeRepo(note = ''): FixtureRepo {
 const PAD = 'pad one\npad two\npad three\npad four\n';
 const STUB = '# Instructions for coding agents working in this repository.\n';
 
-/** Two bases whose native AGENTS.md and docs/AGENTS.md differ, on an eol-filtered repo, then the fix. */
 function makeCarryRepo(): FixtureRepo & { base2: string } {
   const r = makeRepo();
   const git = (...args: string[]): string => execFileSync('git', args, { cwd: r.repo, encoding: 'utf8' }).trim();
@@ -97,11 +92,9 @@ function makeCarryRepo(): FixtureRepo & { base2: string } {
 
 const task = (r: FixtureRepo, id: string, prompt: string, extra: Record<string, string> = {}) => ({ id, kind: 'no-lesson', baseRef: r.base, fixRef: r.fix, prompt, testFiles: ['test.js'], test: 'node test.js', ...extra });
 const readRecords = (out: string) => readFileSync(join(out, 'runs.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
-/** Every record whose session never gave a result carries these, null rather than absent. */
 const NO_SESSION = { resolved: false, usage: null, costUsd: null, turns: null, toolCalls: null, fileReads: null, shellReads: null, repeatedErrors: null, sessionId: null, transcriptFound: false, hippo: null, limitRetries: 0 };
 const rawResult = (out: string, seq: string, arm: string, id: string) => JSON.parse(readFileSync(join(out, 'raw', seq, arm, 'seed1', `${id}.json`), 'utf8'));
 
-/** A dir on the parent PATH with a working `hippo` that leaves a marker when run. */
 function decoyHippo() {
   const dir = tmp('ab-run-decoy-');
   const marker = join(dir, 'ran');
@@ -226,7 +219,6 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
     expect(childEnvs).toHaveLength(8);
     for (const e of childEnvs) {
       expect(JSON.stringify(e)).not.toContain('sentinel-z0-token');
-      // Setup and tests never see the memory's namespace or keys.
       expect(Object.keys(e).filter((k) => k.toUpperCase().startsWith('AIPB_'))).toEqual([]);
       expect(String(Object.entries(e).find(([k]) => k.toUpperCase() === 'PATH')?.[1]).split(delimiter)).not.toContain(join(dirname(e.CLAUDE_CONFIG_DIR), 'bin'));
       expect(e.HIPPO_HOME).toMatch(/hippo-home$/);
@@ -256,7 +248,6 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
       if (arm === 'A0') expect(settings).toEqual({ autoMemoryEnabled: false });
       if (arm === 'A1') expect(settings).toEqual({});
       if (memory) expect(settings).toEqual(FAKE_MEMORY.settings);
-      // The fake memory installs no hippo, so no arm's shell finds one.
       expect(res.hippoProbe.status).not.toBe(0);
       expect(res.hippoProbe.stderr).toMatch(/not recognized|not found/i);
       expect(res.hippoDir).toBeNull();
@@ -264,13 +255,11 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
     expect(existsSync(decoy.marker)).toBe(false);
     expect(get('A1', 'a2').repeatedErrors).toBe(1);
 
-    // A2's memory keeps the FIX lesson for a2; A5's a2 starts on a new, empty namespace.
     expect(raw('A2', 'a2').memoryExport).toContain('operator flipped');
     expect(raw('A5', 'a1').memoryExport).toBe('');
     expect(raw('A5', 'a2').memoryExport).toBe('');
     expect(raw('A0', 'a2').memoryExport).toBeNull();
 
-    // No future: the workspace history ends at the task's base, never the fix.
     const log = execFileSync('git', ['log', '--all', '--format=%H'], { cwd: join(out, 'runs', 'seqA', 'A1', 'seed1', 'work'), encoding: 'utf8' });
     expect(log).toContain(r.base);
     expect(log).not.toContain(r.fix);
@@ -435,7 +424,6 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
     const spec = validateTasks({ sequences: [{ id: 'seqW', cluster: 'c', repo: r.repo, fixedOrder: true, tasks: [task(r, 'w1', 'FIX RMWORK'), task(r, 'w2', 'FIX add in lib.js')] }] });
     await run(spec, ['A1'], out);
     const [w1, w2] = readRecords(out);
-    // Deleting work/ deletes its .git, so the runner's own git fails after the session (README reading 11).
     expect(w1).toMatchObject({ taskId: 'w1', invalid: 'workspace', resolved: false, usage: null, costUsd: null, turns: null, toolCalls: null, fileReads: null, wallMs: null, acceptancePassed: null, lessons: [] });
     expect(w2).toMatchObject({ taskId: 'w2', invalid: null, resolved: true });
   }, 60_000);
@@ -539,7 +527,6 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
       expect(n2).toMatchObject({ invalid: null, transcriptFound: true });
       expect(n2.homesAtStart).not.toBeNull();
       const calls = readFileSync(join(out, 'runs', 'seqN', arm, 'seed1', 'home', 'fakemem', 'calls.log'), 'utf8').trim().split('\n');
-      // A5's namespace is n2's own, so its init line shows init waited for n2.
       expect(calls.slice(1)).toEqual([`init ${rawResult(out, 'seqN', arm, 'n2').env.AIPB_NAMESPACE}`]);
     }
   }, 60_000);
@@ -671,7 +658,6 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
     const cells: Array<{ arm: string; seed: number }> = JSON.parse(readFileSync(join(out, 'plan.json'), 'utf8'));
     expect(new Set(cells.map((c) => `${c.arm}${c.seed}`))).toEqual(new Set(['A14', 'A15', 'A24']));
 
-    // The runner's cap is the record contract's SEED_CAP: that count plans.
     const nine = cli('--seed-rule', rule({ seeds: { A1: SEED_CAP, A2: SEED_CAP, A5: SEED_CAP } }));
     expect(nine.status, nine.stderr).toBe(0);
     expect(nine.stdout).toContain(`A1:4-${SEED_CAP}`);
@@ -738,7 +724,6 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
     delete env.Z0_ANCESTOR_STOP;
     const real = spawnSync(process.execPath, [AB_RUN, '--tasks', tasksFile, '--out', out, '--arms', 'A0'], { encoding: 'utf8', env });
     expect(real.status).not.toBe(0);
-    // A box with a CLAUDE.md above tmp never reaches the clone; the preflight tests below cover the link refusal there.
     if (ancestorInstructionFiles(out).length) {
       expect(real.stderr).toContain('Claude Code would load these instruction files above');
       expect(existsSync(out)).toBe(false);
@@ -749,7 +734,6 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
   }, 60_000);
 });
 
-/** makeRepo plus one commit adding `links` as 120000 entries and `files` as regular files; `linked` is that commit. */
 function linkRepo(links: Record<string, string>, files: Record<string, string> = {}): FixtureRepo & { linked: string } {
   const r = makeRepo();
   const g = (...args: string[]): string => execFileSync('git', args, { cwd: r.repo, encoding: 'utf8' }).trim();

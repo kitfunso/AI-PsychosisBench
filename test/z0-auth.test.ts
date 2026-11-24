@@ -1,4 +1,3 @@
-// Version 1 auth and memory identity: a run uses one auth mode, every record names it, and A2 and A5 records name their memory manifest.
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -8,7 +7,6 @@ import { g1 } from '../lib/z0-gates.mjs';
 import { validateCorpus } from './fixtures/z0-contract.js';
 import { FAKE_MEMORY, cleanup, find, fixtureEnv, isolate, logLines, makeRepo, oneLesson, rawResult, readPlan, readRecords, run, tmp } from './fixtures/z0-harness.js';
 
-// Every run case builds a git repository in a child process, through the z0 harness fixture.
 vi.setConfig({ testTimeout: 30_000 });
 
 const FAKE_KEY = 'zq-fake-api-key-0000';
@@ -21,9 +19,7 @@ afterEach(() => {
   }
   cleanup();
 });
-// The fixtures' own --pass-env names sit outside the allowlist, so G1 reads the records without them.
 const runNames = <T extends { envKeys?: string[] }>(recs: T[]): T[] => recs.map((r) => ({ ...r, envKeys: (r.envKeys ?? []).filter((k) => !fixtureEnv().includes(k)) }));
-/** Sets the run's auth vars; undefined unsets one. */
 function auth(token: string | undefined, key: string | undefined) {
   for (const [k, v] of [[TOKEN_KEY, token], [API_KEY, key]] as const) {
     if (v === undefined) delete process.env[k];
@@ -75,7 +71,6 @@ describe('a run in one auth mode', () => {
     }
     expect(() => validateCorpus(recs, readPlan(out))).not.toThrow();
     expect(g1(runNames(recs), {})).toMatchObject({ pass: true, envKeysOutside: {}, authModes: { oauth: 0, apikey: 5 }, mixedAuth: false });
-    // The same records next to one OAuth session fail G1: a run never mixes modes.
     expect(g1(runNames([...recs, { ...recs[0], auth: 'oauth' }]), {})).toMatchObject({ pass: false, authModes: { oauth: 1, apikey: 5 }, mixedAuth: true });
   }, 300_000);
 

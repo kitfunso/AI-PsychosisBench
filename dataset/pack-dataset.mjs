@@ -1,4 +1,3 @@
-// Packs the Z0 round 3 wave 1 task data into out/<SLUG>-r3-v1/. Read-only on inputs.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -19,14 +18,12 @@ const fail = (m) => { console.error(`ERROR: ${m}`); process.exit(1); };
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const writeJson = (p, o) => fs.writeFileSync(p, JSON.stringify(o, null, 2) + '\n');
 
-// 1. keys from the wave 1 run dirs (gr3-w1 was replaced by gr3-w1b)
 const runDirs = fs.readdirSync(RUNS, { withFileTypes: true })
   .filter((e) => e.isDirectory() && /-w1b?$/.test(e.name) && e.name !== 'gr3-w1')
   .map((e) => e.name).sort();
 const map = runDirs.map((d) => ({ runDir: d, key: d.replace(/-w1b?$/, '') }));
 const keys = map.map((m) => m.key).sort();
 if (new Set(keys).size !== keys.length) fail('duplicate keys from run dirs');
-// Round 3 ran merged-r3/<key>-r/tasks-run.json (s3x-run.ps1); merged-r3/<key>/ is the larger pool it was cut from.
 const srcOf = (key) => `${MERGED}/${key}-r`;
 const TASKS_FILE = 'tasks-run.json';
 const missing = map.filter((m) => !fs.existsSync(`${srcOf(m.key)}/${TASKS_FILE}`));
@@ -35,7 +32,6 @@ if (missing.length) fail(`no ${TASKS_FILE} in merged-r3 for: ${missing.map((m) =
 if (keys.length !== 29) fail(`expected 29 keys, found ${keys.length}`);
 console.log(`keys: ${keys.length}`);
 
-// 1b. the packed tasks are the tasks round 3 ran: each repo's task ids must equal those its wave 1 records name
 const idsRun = (runDir) => new Set(fs.readFileSync(`${RUNS}/${runDir}/run/runs.jsonl`, 'utf8').split(/\r?\n/)
   .filter((l) => l.trim()).map((l) => JSON.parse(l).taskId));
 const drift = map.flatMap(({ runDir, key }) => {
@@ -49,14 +45,12 @@ const drift = map.flatMap(({ runDir, key }) => {
 if (drift.length) fail(`tasks differ from round 3's records, so the pack would not be the run:\n${drift.join('\n')}`);
 console.log('tasks: every repo packs exactly the task ids its round 3 records name');
 
-// 2. pins
 const pinsIn = JSON.parse(fs.readFileSync(`${SCORED}/pins-r3.json`, 'utf8'));
 console.log(`pins: claudeVersion=${pinsIn.claudeVersion} model=${pinsIn.model}`);
 if (pinsIn.claudeVersion !== EXPECT.claudeVersion || pinsIn.model !== EXPECT.model) {
   fail(`pins differ from expected ${JSON.stringify(EXPECT)}`);
 }
 
-// 3. canary, generated once
 const canaryFile = path.join(HERE, 'canary.txt');
 if (!fs.existsSync(canaryFile)) fs.writeFileSync(canaryFile, crypto.randomUUID() + '\n');
 const guid = fs.readFileSync(canaryFile, 'utf8').trim();
@@ -86,7 +80,6 @@ function detectLicence(t) {
   return 'unknown';
 }
 
-// 5. toolchain detection from setup and test lines
 const TOOLS = [
   ['mvnw.cmd', /\bmvnw(\.cmd)?\b/], ['maven', /(^|[\s&;(])mvn\b/], ['gradlew.bat', /\bgradlew(\.bat)?\b/],
   ['dotnet', /\bdotnet\b/], ['go', /(^|[\s&;(])go (test|build|mod|vet|run)\b/],
@@ -113,7 +106,6 @@ function toolchain(tasks) {
   return { tools: found.length ? found : ['unknown'], envVars: [...env].sort(), commandCount: cmds.length };
 }
 
-// 6. pack, one repo at a time
 const countFiles = (d) => fs.readdirSync(d, { withFileTypes: true })
   .reduce((n, e) => n + (e.isDirectory() ? countFiles(path.join(d, e.name)) : 1), 0);
 function lessonChecks(tasks) {
@@ -142,7 +134,6 @@ for (const key of keys) {
   fs.mkdirSync(dst, { recursive: true });
   const tasksRaw = fs.readFileSync(`${src}/${TASKS_FILE}`);
   const tasks = JSON.parse(tasksRaw);
-  // Vendors get no C:/z0-runs, so each sequence points at the bundle beside its tasks file.
   const portable = tasksRaw.toString('utf8').split(`${src}/repo`).join('repo.bundle');
   if (portable.includes('z0-runs')) throw new Error(`${key}/tasks.json still names a C:/z0-runs path; extend the rewrite in pack-dataset.mjs`);
   fs.writeFileSync(path.join(dst, 'tasks.json'), portable);
@@ -170,7 +161,6 @@ for (const key of keys) {
 }
 if (noLicence.length) fail(`no licence file in: ${noLicence.join(', ')}`);
 
-// 7. metadata files
 const lite = keys.map((k) => [sha256(`lite-v1/${k}`), k]).sort().slice(0, 8).map(([, k]) => k).sort();
 writeJson(path.join(OUT, 'pins.json'), {
   dataset: DATASET, round: 'r3', claudeVersion: pinsIn.claudeVersion, model: pinsIn.model,
@@ -190,7 +180,6 @@ const readme = fs.readFileSync(readmePath, 'utf8').replace(
 fs.writeFileSync(readmePath, readme);
 fs.writeFileSync(path.join(OUT, 'README.md'), readme);
 
-// 9. manifest, last
 const entries = writeManifest(OUT);
 const totalBytes = entries.reduce((n, e) => n + e.bytes, 0);
 console.log(`TOTAL repos=${keys.length} tasks=${totalTasks} checks=${totalChecks} bundles=${totalBundle.toFixed(1)}MB files=${entries.length} size=${(totalBytes / 1048576).toFixed(1)}MB`);

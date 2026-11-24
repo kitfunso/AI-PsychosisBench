@@ -1,4 +1,3 @@
-// The memory adapter: manifest checks, namespaces, the empty start, the key pass-through, install, reset and the export leak scan.
 import { describe, it, expect, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -28,7 +27,6 @@ const tmp = (prefix: string): string => {
 const sha16 = (s: string) => createHash('sha256').update(s).digest('hex').slice(0, 16);
 const pathOnly = () => Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(PATH|PATHEXT|SYSTEMROOT|COMSPEC|TEMP|TMP)$/i.test(k)));
 
-/** A run dir with the fake memory installed, as startRun leaves an adapter arm's run. */
 function memRun(arm = 'A2', adapter = loadAdapter(FAKE)) {
   const out = tmp('aipb-mem-');
   const d = runDirs(out, 'seqA', arm, 1);
@@ -39,7 +37,6 @@ function memRun(arm = 'A2', adapter = loadAdapter(FAKE)) {
   runInstall(ctx, run);
   return { ctx, run, adapter };
 }
-/** Store `text` the way a hook or the agent would, through the run's own launcher env. */
 const remember = (run: Record<string, any>, text: string) => execFileSync(process.execPath, [FAKE_JS, 'remember', text], {
   env: { ...process.env, AIPB_NAMESPACE: run.env.AIPB_NAMESPACE, FAKEMEM_STORE: join(run.dirs.home, 'fakemem') },
 });
@@ -123,7 +120,6 @@ describe('the memory keys in the env', () => {
       const memory = arm === 'A2' || arm === 'A5';
       expect(env.MEM0_API_KEY, arm).toBe(memory ? 'mem0-sentinel' : undefined);
       expect(env.AIPB_MEMORY_KEYS, arm).toBe(memory ? 'MEM0_API_KEY,MEM0_TENANT' : undefined);
-      // The runner names a namespace only for A2 and A5.
       if (memory) setNamespace({ env }, adapter, 'ns1');
       const child = childEnv(env);
       for (const k of ['MEM0_API_KEY', 'MEM0_TENANT', 'AIPB_NAMESPACE', 'AIPB_MEMORY_KEYS', 'CLAUDE_CODE_OAUTH_TOKEN']) expect(child, `${arm} ${k}`).not.toHaveProperty(k);

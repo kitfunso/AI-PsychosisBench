@@ -1,4 +1,3 @@
-// Z0 G5 (prereg 166, 179): the reader sample's seeded draw, blinding, labels and scoring, and the stored sample's statistics.
 import { describe, it, expect, afterEach } from 'vitest';
 import { existsSync, readFileSync, readdirSync, renameSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -18,7 +17,6 @@ import { PHRASE, SEQ, bundledOut, cli, gradeDir, readJson, rowOf, runRoot, seale
 
 const win = process.platform === 'win32';
 const ARM_WORD = /\b(A0|A1|A2|A4|A5|X1|X2|X3|X4)\b/;
-// Its hiddenWords are ["fakemem"].
 const MANIFEST = resolve(__dirname, 'fixtures', 'fake-memory.json');
 interface KeyPair { file: string; pairId: string; key: string; lessonId: string; arm: string; verdict: string; stratum: string }
 const cells = (arm: string, verdicts: Verdict[], from = 0): Cell[] => verdicts.map((first, i) => ({ arm, position: from + i, first }));
@@ -50,7 +48,6 @@ describe('reader sample draw', () => {
     const ids0 = (out: string) => pairsOf(out).map((p) => p.pairId);
     expect(ids0(b.out)).toEqual(ids0(a.out));
     expect(ids0(c.out)).not.toEqual(ids0(a.out));
-    // The same arguments again print the draw; other arguments for a drawn round are refused.
     expect(draw(a.out, a.tasks, ['--n', '10'])).toMatchObject({ code: 0, stdout: expect.stringContaining('already drawn') });
     expect(draw(a.out, a.tasks, ['--n', '12'])).toMatchObject({ code: 1, stderr: expect.stringContaining('was drawn with --seed 7 --n 10') });
     expect(cli(['reader', '--out', a.out, '--tasks', a.tasks])).toMatchObject({ code: 1, stderr: expect.stringContaining('needs --seed') });
@@ -66,7 +63,6 @@ describe('reader sample draw', () => {
     expect(n('A1', 'pass')).toBeGreaterThanOrEqual(3);
     expect(n('A0', 'pass')).toBeGreaterThanOrEqual(2);
     expect(n('A0', 'fail')).toBeGreaterThanOrEqual(2);
-    // A stratum's shortfall goes to the same arm first.
     const groups = [{ share: 3, strata: [{ quota: 2, items: ['x1'] }, { quota: 1, items: ['y1', 'y2', 'y3'] }] }, { share: 3, strata: [{ quota: 3, items: ['z1', 'z2', 'z3', 'z4'] }] }];
     expect(fillStrata(groups, 6, () => true).taken).toEqual(['x1', 'y1', 'y2', 'z1', 'z2', 'z3']);
   });
@@ -83,7 +79,6 @@ describe('reader sample draw', () => {
   });
 
   it('pair files and labels.tsv hold no arm, seed, run name, verdict, checker path, memory command or run path in any spelling (24, R4, R9, R14)', () => {
-    // The out dir carries a memory word in its name, so a path into the run must not read as a memory command.
     const s = synthOut([{ arm: 'A2', position: 0 }], 'z0-g5-hippo-out-');
     const root = realpathSync.native(runRoot(s.out, 'A2'));
     const fwd = root.replace(/\\/g, '/');
@@ -251,7 +246,6 @@ describe('reader sample draw', () => {
   });
 });
 
-/** A link to `target`: a junction on Windows, a symlink elsewhere, like macOS /var to /private/var. */
 function linkTo(target: string) {
   const link = join(tmp('z0-g5-link-'), 'out');
   symlinkSync(target, link, win ? 'junction' : 'dir');
@@ -309,7 +303,6 @@ describe('reader sample labels and scoring', () => {
     expect(score(s.out, labelsFor(r1, (p) => wrong.has(p.file)))).toMatchObject({ code: 0, stdout: expect.stringContaining('2 of 6') });
     expect(gradingOf(s.out)).toMatchObject({ readerSample: { n: 6, disagreements: 2 }, g5: { readerRound: 1, readerEligible: 20, readerRound1Rescored: null } });
 
-    // The fixed checker turns every A1 verdict to pass, so round 1's labels of A1 pairs now disagree.
     writeRows(s.out, listGrades(s.out).map((e) => rowOf(e.grade, 'postfix', e.grade.arm === 'A1' ? { first: 'pass' } : {}, 'y')), 'postfix');
     expect(draw(s.out, s.tasks, ['--round', '2', '--n', '6'])).toMatchObject({ code: 0 });
     const r2 = pairsOf(s.out, 2);
@@ -349,7 +342,6 @@ describe('reader sample labels and scoring', () => {
     expect(next(passed, 2)).toMatchObject({ code: 1, stderr: expect.stringContaining('reader round 1 is not scored') });
     expect(score(passed.out, labelsFor(pairsOf(passed.out)))).toMatchObject({ code: 0 });
     expect(next(passed, 2)).toMatchObject({ code: 1, stderr: expect.stringContaining('reader round 1 passed') });
-    // The same labels again print the score; other labels for a scored round are refused, so a failed round is never re-labelled.
     expect(score(passed.out, labelsFor(pairsOf(passed.out)))).toMatchObject({ code: 0, stdout: expect.stringContaining('0 of 6') });
     expect(score(passed.out, labelsFor(pairsOf(passed.out), allWrong))).toMatchObject({ code: 1, stderr: expect.stringContaining('already scored') });
 
@@ -373,7 +365,6 @@ describe('reader sample labels and scoring', () => {
     expect(gradingOf(s.out)).toMatchObject({ readerSample: { n: 6, disagreements: 0 }, g5: { pass: 'repro' } });
     const turned = (v: Verdict): Verdict => (v === 'pass' ? 'fail' : 'pass');
     const postfix = (sha: string, turn: boolean) => writeRows(s.out, listGrades(s.out).map((e) => rowOf(e.grade, 'postfix', turn ? { first: turned(e.grade.verdicts.first) } : {}, sha)), 'postfix');
-    // Every verdict turned by a checker no reader saw: the two runs agree, so nothing flips and only the reader score could object.
     postfix('y', true);
     const refused = cli(['grading', '--out', s.out]);
     expect(refused).toMatchObject({ code: 1, stderr: expect.stringContaining('reader round 1 passed') });
@@ -406,7 +397,6 @@ describe('reader sample labels and scoring', () => {
     const entries = listGrades(s.out);
     const under = (sha: string) => entries.map((e) => rowOf(e.grade, 'postfix', {}, sha));
     const odd = entries[3];
-    // A second fix regraded one cell only: its later row wins, so that cell's verdict comes from another checker than the rest.
     writeRows(s.out, [...under('y'), rowOf(odd.grade, 'postfix', {}, 'z')], 'postfix');
     for (const r of [cli(['grading', '--out', s.out]), draw(s.out, s.tasks, ['--round', '2', '--n', '6'])]) {
       expect(r).toMatchObject({ code: 1, stderr: expect.stringContaining('2 versions of the checker') });
@@ -460,7 +450,6 @@ describe('reader sample labels and scoring', () => {
 describe('stored sample (179)', () => {
   afterEach(cleanup);
 
-  /** 15 judged yes and 15 judged no, plus one cut, one empty and one hidden-hit unit; `viaLink` spells every path through a link. */
   function storedOut(viaLink = false) {
     const s = synthOut([{ arm: 'A0', position: 100 }]);
     const out = viaLink ? linkTo(s.out) : s.out;
@@ -505,7 +494,6 @@ describe('stored sample (179)', () => {
     expect(blind).toContain('=== part 1\nSee <run>\\work\\lib.js. [tool] keeps');
     expect(blind).toContain('Write the lesson file');
 
-    // Table (12, 3, 2, 13): 12 yes-yes, 3 yes-no, 2 no-yes, 13 no-no.
     const units: { file: string; judged: string }[] = key.units;
     const yes = units.filter((u) => u.judged === 'yes');
     const no = units.filter((u) => u.judged === 'no');
@@ -585,7 +573,6 @@ describe('stored sample (179)', () => {
     expect(draw(s.out, s.tasks)).toMatchObject({ code: 0 });
     expect(score(s.out, labelsFor(pairsOf(s.out)))).toMatchObject({ code: 0 });
     gradingOf(s.out);
-    // Every key and string value sits in the JSON text, so one scan of the file covers both.
     const text = readFileSync(join(s.out, 'grading.json'), 'utf8');
     expect(text).toContain('readerSample');
     expect(text).not.toMatch(ARM_WORD);

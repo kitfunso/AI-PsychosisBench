@@ -1,4 +1,3 @@
-// The public name: one display name and one lowercase slug, which package.json, the command and the cards all follow.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';

@@ -1,4 +1,3 @@
-// Z0 round 3 prereg item 5a: the arm env is an allowlist, armEnv refuses a secret-shaped name, and G1 reads each record's envKeys.
 import { describe, it, expect } from 'vitest';
 import { delimiter } from 'node:path';
 import { API_KEY, armEnv, ARMS, childEnv, ENV_ALLOWLIST, SECRET_SHAPED, TOKEN_KEY } from '../lib/arms.mjs';
@@ -50,14 +49,12 @@ describe('armEnv allowlist (item 5a)', () => {
     }
     expect(message).toMatch(/FAKE_VENDOR_API_KEY.*remove it from ENV_ALLOWLIST/);
     expect(message).not.toContain(value);
-    // The same list passes while the name is unset, so the throw reads the built env, not the list.
     expect(() => armEnv('A1', { ...run, seed: 1 }, base(), { allowlist: list })).not.toThrow();
   });
 
   it('gives the session an API key as it gives the token, and childEnv strips both from setup, tests and checkers', () => {
     const env = armEnv('A2', { ...run, seed: 1 }, base({ anthropic_api_key: 'k' }));
     expect([env[TOKEN_KEY], env[API_KEY]]).toEqual(['tok', 'k']);
-    // An empty one is unset, so it names no auth mode in envKeys.
     const empty = armEnv('A2', { ...run, seed: 1 }, base({ [TOKEN_KEY]: '', ANTHROPIC_API_KEY: '' }));
     expect(Object.keys(empty).filter((k) => [TOKEN_KEY, API_KEY].includes(k.toUpperCase()))).toEqual([]);
     expect(Object.keys(childEnv(env)).filter((k) => [TOKEN_KEY, API_KEY].includes(k.toUpperCase()))).toEqual([]);
@@ -87,7 +84,6 @@ describe('G1 envKeys conditions (item 5a)', () => {
     const keyed = rec([...clean.filter((k) => k !== TOKEN_KEY), 'Anthropic_Api_Key']);
     expect(g1([keyed, keyed], {})).toMatchObject({ pass: true, envKeysOutside: {}, authModes: { oauth: 0, apikey: 2 }, mixedAuth: false });
     expect(g1([keyed, rec(clean)], {})).toMatchObject({ pass: false, envKeysOutside: {}, authModes: { oauth: 1, apikey: 1 }, mixedAuth: true });
-    // A record's own auth field wins over its env names.
     expect(g1([{ ...rec(clean), auth: 'apikey' }, rec(clean)], {})).toMatchObject({ pass: false, mixedAuth: true });
   });
 

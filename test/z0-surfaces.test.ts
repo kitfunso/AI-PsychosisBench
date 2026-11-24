@@ -1,5 +1,3 @@
-// Z0 memory surfaces with the fake Claude Code: the run ledger, the retry restores and the record contract E7 reads.
-// Costs nothing; no real claude or codex session runs.
 import { describe, it, expect, afterEach } from 'vitest';
 import { appendFileSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -18,7 +16,6 @@ const sha = (b: Buffer | string) => createHash('sha256').update(b).digest('hex')
 const lineOf = (lines: LedgerLine[], arm: string, id: string, when: string) => lines.find((l) => l.arm === arm && l.taskId === id && l.when === when)!;
 const SURFACE_KEYS = ['autoMemory', 'codexInstructions', 'codexMemories', 'codexState', 'hippoGlobal', 'hippoWork', 'instructions', 'userInstructions'];
 
-/** A run object and ctx for calling the surface functions directly. */
 function unitRun(name: string) {
   const out = tmp(`z0-surf-unit-${name}-`);
   const dirs = runDirs(out, 'seqU', 'A2', 1);
@@ -48,7 +45,6 @@ describe('the surface ledger (prereg 104)', () => {
       expect(Object.keys(pre.surfaces).sort()).toEqual(SURFACE_KEYS);
       expect(pre.surfaces.autoMemory.map((e) => e.path)).toEqual([expect.stringMatching(/^claude-config\/projects\/[^/]+\/memory\/MEMORY\.md$/)]);
       expect(pre.surfaces.instructions.map((e) => e.path)).toContain('work/CLAUDE.md');
-      // The fake memory keeps its store in the run's home, never in work/.hippo.
       expect(pre.surfaces.hippoWork, arm).toEqual([]);
       const end = lineOf(lines, arm, 'n2', 'end');
       for (const entries of Object.values(end.surfaces)) {
@@ -119,7 +115,6 @@ describe('retry restores (prereg 114)', () => {
       expect(restore.verified, arm).toBe(true);
       const pre = lineOf(lines, arm, 't1', 'pre-resume');
       for (const [k, entries] of Object.entries(restore.surfaces)) expect(entries, `${arm} ${k}`).toEqual(pre.surfaces[k]);
-      // The rerun's own write is the one that stays.
       expect(pre.surfaces.autoMemory, arm).toEqual([]);
       const memory = join(runRoot(out, arm), lineOf(lines, arm, 't1', 'end').surfaces.autoMemory[0].path);
       expect(readFileSync(memory, 'utf8'), arm).toBe('resume note\n');
@@ -147,7 +142,6 @@ describe('retry restores (prereg 114)', () => {
     expect(snap.surfaces.autoMemory.map((e: { path: string }) => e.path)).toEqual(['claude-config/projects/p/memory/MEMORY.md', 'claude-config/projects/q/memory/MEMORY.md']);
     expect(existsSync(join(snap.copyDir!, 'autoMemory', 'q'))).toBe(false);
     expect(restoreSurfaces(ctx, r, snap, 'retry-restore', step)).toBe(true);
-    // A write through the link, and a linked folder the cut-off attempt made: neither is deleted, so the restore cannot match.
     appendFileSync(q, 'written through the link\n');
     const s = linkedMemory('s');
     expect(restoreSurfaces(ctx, r, snap, 'retry-restore', step)).toBe(false);
@@ -184,7 +178,6 @@ describe('the z0-record/1 contract copy (E7)', () => {
   it('takes a named void, surfaceRestored and chain, and refuses their wrong shapes', () => {
     expect(() => validateRecord(ok)).not.toThrow();
     expect(() => validateRecord({ ...ok, void: '' })).toThrow(/void/);
-    // A JSON round trip types the wrong shapes as any, the way a corpus line arrives.
     expect(() => validateRecord(JSON.parse(JSON.stringify({ ...ok, surfaceRestored: 'yes' })))).toThrow(/surfaceRestored/);
     expect(() => validateRecord(JSON.parse(JSON.stringify({ ...ok, chain: { ...ok.chain, shown: 'x' } })))).toThrow(/chain.shown/);
     expect(() => validateRecord({ ...ok, arm: 'A1', chain: { ...ok.chain!, captured: true } })).toThrow(/captured/);

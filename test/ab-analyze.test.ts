@@ -1,8 +1,3 @@
-/**
- * TE5 A/B analyzer on synthetic run records with a known effect: the hippo
- * arm resolves the same tasks for less, and the random-text control does not.
- * The records are generated here, not measured; they test the arithmetic.
- */
 import { describe, it, expect } from 'vitest';
 import { parseRuns, analyze, recordCost } from '../lib/ab-analyze.mjs';
 

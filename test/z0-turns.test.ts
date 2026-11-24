@@ -1,5 +1,3 @@
-// Z0 lesson tasks end to end with the fake Claude Code: checks, teach and correction resumes, A4, the resume-limit
-// restore and every record shape against the z0-record/1 contract. Costs nothing; the fake's token numbers are made up.
 import { describe, it, expect, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -38,7 +36,6 @@ const tmp = (prefix: string): string => {
   return d;
 };
 
-/** Temp HOME, USERPROFILE, APPDATA and cwd, and a fresh fake-Claude log; returns the out dir and the log path. */
 function isolate(name: string) {
   const home = tmp(`z0-turns-home-${name}-`);
   process.env.HOME = home;
@@ -78,7 +75,6 @@ interface TaskDef {
   familyId?: string; lessonId?: string; setup?: string;
 }
 interface RunExtra { limitWaitMs?: number; limitMaxWaits?: number; sessionTimeoutMs?: number; pins?: Record<string, string>; log?: (m: string) => void; tokenSchedule?: string; tokenVar?: string; readToken?: (name: string) => string | null }
-/** What the toy lesson checker logs per call; the probe fields appear only with its `probe` arg. */
 interface CheckLine {
   lesson: string; pre: string; post: string; preRef: string | null; commands: string[]; resume: string[] | null; has?: boolean;
   head?: string; symbolic?: string | null; logAll?: string; reflog?: string | null; refs?: string;
@@ -91,7 +87,6 @@ const apply = (r: FixtureRepo, id: string, lessonId: string, prompt: string, ext
 const plain = (r: FixtureRepo, id: string) => task(r, id, 'look around only');
 interface Spec { families: FamilyDef[]; sequences: Array<{ id: string; cluster: string; repo: string; fixedOrder: boolean; tasks: TaskDef[] }> }
 const spec = (r: FixtureRepo, families: FamilyDef[], tasks: TaskDef[]): Spec => validateTasks({ families, sequences: [{ id: 'seqF', cluster: 'c', repo: r.repo, fixedOrder: true, tasks }] }, CHECKS);
-/** The usual reversal family: f1-l1 then f1-l2 superseding it. */
 const reversal = (l1: Partial<LessonDef> = {}, l2: Partial<LessonDef> = {}) => family('f1', [lesson('f1-l1', 'Write the lesson file', l1), lesson('f1-l2', 'Write the lesson file twice', { supersedes: 'f1-l1', ...l2 })]);
 
 async function run(s: ReturnType<typeof spec>, arms: string[], out: string, extra: RunExtra = {}) {
@@ -127,7 +122,6 @@ describe('runner git', () => {
     const cfg = join(hooks, 'gitconfig');
     writeFileSync(cfg, `[core]\n\thooksPath = ${hooks.replace(/\\/g, '/')}\n[i18n]\n\tcommitEncoding = ISO-8859-1\n`);
     process.env.GIT_CONFIG_GLOBAL = cfg;
-    // The control: plain git under this config does run the hook.
     execFileSync('git', ['update-ref', 'refs/z0/probe', r.base], { cwd: r.repo });
     expect(existsSync(marker)).toBe(true);
     rmSync(marker);
@@ -157,12 +151,10 @@ describe('runner git', () => {
     const script = join(d, 'fsmon.sh');
     writeFileSync(script, `#!/bin/sh\necho ran >> "${marker}"\n`, { mode: 0o755 });
     execFileSync('git', ['config', 'core.fsmonitor', script.replace(/\\/g, '/')], { cwd: r.repo });
-    // The control: plain git status in the workspace does run it.
     execFileSync('git', ['status', '--porcelain'], { cwd: r.repo });
     expect(existsSync(marker)).toBe(true);
     rmSync(marker);
     const check = join(d, 'status.mjs');
-    // Exit 2 (a broken checker) if the runner clobbered the caller's own GIT_CONFIG_PARAMETERS.
     writeFileSync(check, [
       "import { spawnSync } from 'node:child_process';",
       "if (!(process.env.GIT_CONFIG_PARAMETERS ?? '').includes('color.ui=never')) process.exit(2);",
@@ -182,13 +174,11 @@ describe('runner git', () => {
     execFileSync('git', ['config', "filter.z0'agent.clean", `sh -c 'echo ran >> "${marker}"; cat'`], { cwd: r.repo });
     execFileSync('git', ['config', "filter.z0'agent.required", 'true'], { cwd: r.repo });
     writeFileSync(join(r.repo, '.gitattributes'), "* filter=z0'agent\n");
-    // Same bytes, a new mtime: status must read the file through the filter to see it is unchanged.
     const restat = () => {
       writeFileSync(join(r.repo, 'lib.js'), readFileSync(join(r.repo, 'lib.js')));
       utimesSync(join(r.repo, 'lib.js'), new Date(), new Date(Date.now() + 60_000));
     };
     restat();
-    // The control: plain git status in the workspace does run it.
     execFileSync('git', ['status', '--porcelain'], { cwd: r.repo });
     expect(existsSync(marker)).toBe(true);
     rmSync(marker);
@@ -247,7 +237,6 @@ describe('Z0 lesson tasks end to end (fake Claude Code)', () => {
         expect('scored' in x).toBe(false);
       }
     }
-    // CHECK_COMMANDS: session one's commands at the first check, then the correction turn's too at the final check.
     const a1Checks = checkLog(log).filter((c) => c.commands.includes('npm run lint'));
     expect(a1Checks).toHaveLength(2 * FIVE_ARMS.length);
     for (const c of a1Checks) expect(c.commands.slice(0, 2)).toEqual(['git status && cat lib.js', 'npm run lint']);
@@ -490,10 +479,8 @@ describe('session evidence', () => {
     const checks = checkLog(log).filter((c) => c.lesson === 'f1-l1');
     expect(checks[0].commands).toEqual(['git status && cat lib.js', 'npm run lint']);
     expect(checks[1].commands).toEqual(['git status && cat lib.js', 'echo resumed No:', 'npm run lint']);
-    // CHECK_RESUME_COMMANDS: what each transcript gained since the first check, so the subagent's earlier command stays out. The applies' first checks get none.
     expect(checks.map((c) => c.resume)).toEqual([null, ['echo resumed No:'], null, null]);
     expect(JSON.parse(readFileSync(join(out, 'grading', 'seqF', 'A0', 'seed1', 't1.grade.json'), 'utf8')).commandsResume).toEqual(['echo resumed No:']);
-    // Session 1 makes 3 tool calls, its subagent 1 and the resume 1.
     expect(find(recs, 'A0', 'n1').toolCalls).toBe(3);
     expect(find(recs, 'A0', 't1').toolCalls).toBe(5);
   }, 300_000);
@@ -570,7 +557,6 @@ describe('usage limits around resumes', () => {
     await run(s, ['A0'], out, { limitWaitMs: 5000 });
     const t1 = find(readRecords(out), 'A0', 't1');
     expect(t1).toMatchObject({ invalid: null, limitRetries: 1, lessons: [{ first: 'fail', final: 'pass' }] });
-    // t1's step spans its start to n1's start and holds at least the 5 s nap and 5 s wait, which load only stretches; wallMs must leave both out.
     const started = Object.fromEntries(readFileSync(join(out, 'runs.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l)).map((rec) => [rec.taskId, Date.parse(rec.startedAt)]));
     const stepMs = started.n1 - started.t1;
     const wallMs = t1.wallMs ?? -1;
