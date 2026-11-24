@@ -27,7 +27,7 @@ Task data for AI-PsychosisBench. It has 29 open source repositories. Each reposi
 | Round 3 prompts | 5,880 (task prompts, teach messages and corrections) |
 | Round 3 usage | $1,585.90 at API list price |
 
-Round 3's share of lessons failed on the first try, at each lesson's first apply: no memory 0.839, Claude Code built-in memory 0.265, built-in + hippo 0.116, built-in + hippo with saving off 0.107, perfect memory 0.068. Hippo against built-in memory is -0.149 [-0.243, -0.055]. Full hippo against hippo with saving off (the decoy: hippo fully installed, with its save commands turned off) is +0.009 [-0.052, 0.070], so the gain comes from installing hippo, not from its stored lessons. The benchmark repository has the full table: https://github.com/kitfunso/AI-PsychosisBench
+Round 3's share of lessons failed on the first try, at each lesson's first apply: no memory 0.839, Claude Code built-in memory 0.265, built-in + hippo 0.116, built-in + hippo with saving off 0.107, perfect memory 0.068. Hippo against built-in memory is -0.149 [-0.243, -0.055]. Full hippo against hippo with saving off (the decoy: hippo fully installed, with its save commands turned off) is +0.009 [-0.052, 0.070], so round 3 cannot credit hippo's stored lessons with the gain. The benchmark repository has the full table: https://github.com/kitfunso/AI-PsychosisBench
 
 ## Layout
 

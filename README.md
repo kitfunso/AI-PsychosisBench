@@ -50,7 +50,9 @@ Share of lessons failed on the first try, at each lesson's first apply (violatio
 | A5 built-in + hippo, saving off (the decoy) | 0.107 [0.060, 0.154] |
 | A4 perfect memory | 0.068 [0.006, 0.131] |
 
-All five gates pass. Hippo against built-in memory is -0.149 [-0.243, -0.055] (Holm-adjusted p 0.006), at a cost ratio of 1.006 [0.964, 1.049]. In round 3 the decoy was hippo fully installed, with its saving turned off: the same build, hooks and `CLAUDE.md` block, but its save commands did nothing, so its store stayed empty. Full hippo against hippo with saving off is +0.009 [-0.052, 0.070]. Both arms with hippo installed cut repeat mistakes by the same amount, so the gain comes from installing hippo, and round 3 cannot credit hippo's stored lessons. Our audit points to hippo's `CLAUDE.md` block: it sent agents to Claude Code's own memory files, even when hippo had saved nothing.
+All five gates pass. Hippo against built-in memory is -0.149 [-0.243, -0.055] (Holm-adjusted p 0.006), at a cost ratio of 1.006 [0.964, 1.049]. In round 3 the decoy was hippo fully installed, with its saving turned off: the same build, hooks and `CLAUDE.md` block, but its save commands did nothing, so its store stayed empty. Full hippo against hippo with saving off is +0.009 [-0.052, 0.070]. Both arms with hippo installed cut repeat mistakes by about the same amount, so round 3 cannot credit hippo's stored lessons with the gain. With saving off, agents ran a hippo command in 89 of 148 first applies and read Claude Code's own memory files more often (47 against 26 with built-in memory alone). Round 3 has no arm that installs only hippo's instruction text, so it cannot show which route produced the gain.
+
+`round3/outcomes.jsonl` is round 3's verdict table, one row per task record. `node round3/tables.mjs` rebuilds the paper's Figure 1 and Tables 3 to 5 from it (`round3/README.md`).
 
 The code lines are `git grep -I -c` counts over code file types at each repository's snapshot commit. Sessions are the distinct Claude Code session ids in the task records. Prompts are the typed user turns in those sessions' transcripts.
 
